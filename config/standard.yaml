@@ -1,0 +1,1635 @@
+# Analysis Standard: the ONE source of every analysis rule in demo3.
+# docs/STANDARD.md (English) and docs/STANDARD_vi.md (Vietnamese) are GENERATED from this file:
+#   python scripts/kb.py standard --write-docs        (never edit the .md files by hand)
+# Gathered, not invented, from AGENTS.md, CONTRACTS (V1-V14, A1-A9, G1/WH1, 8.x), docs/AI_ANALYSIS_GUIDE.md,
+# config/answer_protocol.md, skill ai-analysis-submit and the project's own development plan and audit
+# (private documents that are not shipped).
+# Word lists stay where they are and are referenced by path (config/hedge_lexicon.yaml, synonyms.yaml,
+# generic_terms.yaml, homonyms.yaml, concept_parents.yaml): this file never copies them.
+#
+# Clause fields: id (<stage>-<nn>), stage, rule (English, one sentence), vi (plain Vietnamese, one sentence),
+# pass / fail (measurable conditions), level (fail = blocks, warn = reported), enforced_by (module.func under
+# scripts/kbsys, or G3 = not enforced by code yet), audit (refs), params (optional thresholds / lists).
+version: "1.4"
+status: frozen
+stages:
+  IN: {en: "Intake and duplicates", vi: "Nhập bài và trùng lặp"}
+  CHR: {en: "Characters and encoding", vi: "Ký tự và mã hóa"}
+  CH: {en: "Chunking: sentences, passages, tables, sections", vi: "Tách câu, đoạn, bảng, mục"}
+  EV: {en: "Evidence units (AI)", vi: "Đơn vị bằng chứng (AI)"}
+  SP: {en: "Structured paper profiles", vi: "Hồ sơ cấu trúc của bài"}
+  FG: {en: "Figure and table reading", vi: "Đọc hình và bảng"}
+  ND: {en: "Concepts and nodes", vi: "Khái niệm và node"}
+  RL: {en: "Relations, conflicts, typed network", vi: "Quan hệ, mâu thuẫn, mạng có kiểu"}
+  NC: {en: "Node cards (AI)", vi: "Thẻ node (AI)"}
+  VN: {en: "Vault notes", vi: "Note trong vault"}
+  RT: {en: "Retrieval", vi: "Truy xuất"}
+  AN: {en: "Answers and the answer checker", vi: "Trả lời và bộ kiểm câu trả lời"}
+  NW: {en: "Neural network route", vi: "Nhánh mạng neural"}
+  RQ: {en: "Review queue and human decisions", vi: "Hàng chờ duyệt và quyết định của người"}
+  SF: {en: "Safety and privacy", vi: "An toàn và riêng tư"}
+
+clauses:
+  # ---------------------------------------------------------------- IN
+  - id: IN-01
+    stage: IN
+    rule: "Before ingesting a paper, look for an existing record in this order: DOI, PMID, normalised title plus year, file hash; a match merges missing source information and never creates a second record."
+    vi: "Trước khi nhập bài, kiểm tra trùng theo thứ tự DOI, PMID, tiêu đề cùng năm, mã băm file; trùng thì gộp thông tin còn thiếu, không tạo bản thứ hai."
+    pass: "Re-ingesting the same paper (any one of the four keys equal) leaves the paper count unchanged and fills only empty source fields."
+    fail: "A second paper record exists for a paper whose DOI, PMID, normalised title+year or file hash equals an existing one."
+    level: fail
+    enforced_by: ingest.find_existing
+    audit: [AGENTS-duplicates]
+  - id: IN-02
+    stage: IN
+    rule: "A paper that belongs to two vaults is one canonical record, never a duplicate."
+    vi: "Một bài nằm trong hai vault vẫn là một bản ghi duy nhất, không phải bài trùng."
+    pass: "paper_vaults lists the same paper_id under each vault and papers has one row for it."
+    fail: "The same publication exists under two paper_ids because it is in two vaults."
+    level: fail
+    enforced_by: ingest._attach_paper_to_vault
+    audit: [AGENTS-duplicates]
+  - id: IN-03
+    stage: IN
+    rule: "Original PDFs and supplementary files are immutable: their SHA-256 never changes after ingest, and none is deleted without the researcher's approval."
+    vi: "File PDF gốc và phụ lục không bao giờ bị sửa; không xóa nếu nhà nghiên cứu chưa đồng ý."
+    pass: "The stored SHA-256 of every source file equals the file on disk (or the file is recorded as archived/unavailable)."
+    fail: "A source file hash differs from the recorded one, or a source file was removed without a recorded approval."
+    level: fail
+    enforced_by: conform_intake.sources_unchanged
+    audit: [AGENTS-sources]
+  - id: IN-04
+    stage: IN
+    rule: "A batch is processed one paper at a time; no step loads the whole batch or the whole knowledge base into memory."
+    vi: "Xử lý từng bài một; không nạp cả lô hay cả kho vào bộ nhớ (máy chỉ có 8 GB RAM)."
+    pass: "Ingest, analysis, rebuild and benchmark loops read one paper folder per iteration."
+    fail: "A step reads every sentences.jsonl at once, or its peak memory grows with the library size."
+    level: warn
+    enforced_by: G3
+    audit: [AGENTS-batch]
+    params: {machine_ram_gb: 8}
+  - id: IN-05
+    stage: IN
+    rule: "Identifiers follow CONTRACTS section 1: paper make_paper_id, sentence <paper_id>:S<seq>, evidence unit <paper_id>:E<seq>, figure :F<n>, table :T<n>; sequence numbers follow reading order and are never reused."
+    vi: "Mã định danh theo đúng định dạng đã quy ước và không bao giờ dùng lại."
+    pass: "Every ID matches its pattern and the sentence seq runs 1..n without gaps."
+    fail: "An ID does not match its pattern, is reused, or a seq gap exists."
+    level: fail
+    enforced_by: selftest.check_paper
+    audit: [CONTRACTS-1, I2]
+  - id: IN-06
+    stage: IN
+    rule: "When the PDF is unreachable, sentences are rebuilt from stored passages, the record says so (tier1.from = passages_only) and original-file verification is reported as unavailable."
+    vi: "Khi không mở được PDF gốc, hệ thống ghi rõ điều đó và nói là không kiểm được với file gốc."
+    pass: "metadata.tier1.from is passages_only and the verification request answers 'original unavailable'."
+    fail: "A verification against the original is claimed for a paper whose PDF is unreachable."
+    level: warn
+    enforced_by: conform_intake.passages_only_says_so
+    audit: [AGENTS-sources]
+  - id: IN-07
+    stage: IN
+    rule: "A source file may be local, archived, managed by a reference manager or unavailable; the record keeps enough metadata and provenance (path, SHA-256, status, reference-manager key) to locate or restore it."
+    vi: "File gốc có thể nằm trên máy, đã lưu trữ, do phần mềm quản lý tài liệu giữ hoặc không còn; hồ sơ luôn đủ thông tin (đường dẫn, mã băm, trạng thái) để tìm lại."
+    pass: "Every source_files entry has a path or an archived/unavailable status plus a SHA-256."
+    fail: "A source entry has neither a reachable path nor a recorded status, or no SHA-256."
+    level: warn
+    enforced_by: conform_intake.sources_can_be_located
+    audit: [AGENTS-storage]
+  - id: IN-08
+    stage: IN
+    rule: "A cited reference not in the library becomes a ghost paper only when it has a DOI (ghost:doi:<lowercase doi>) or a title plus year (ghost:t:<sha1 of normalised title and year, 12 hex>); with neither it makes no ghost."
+    vi: "Tài liệu được trích dẫn mà chưa có trong kho chỉ thành bài 'ma' khi có DOI hoặc có cả tiêu đề và năm; thiếu cả hai thì không tạo."
+    pass: "ghost_id returns None for a reference with no DOI and no title+year, and the documented ID forms otherwise."
+    fail: "A ghost is created from a reference with no DOI and no title+year, or its ID form differs."
+    level: fail
+    enforced_by: ghosts.ghost_id
+    audit: [CONTRACTS-6]
+  - id: IN-09
+    stage: IN
+    rule: "A supplementary file is copied, never moved or modified, its SHA-256 is verified after the copy, and in a batch only a unique match (DOI, then unique parent filename) is attached."
+    vi: "File phụ lục chỉ được sao chép (không di chuyển, không sửa), kiểm lại mã băm sau khi sao; trong lô chỉ gắn khi khớp duy nhất."
+    pass: "The copy's SHA-256 equals the original's, the original is unchanged, and an ambiguous batch match is not attached."
+    fail: "A supplement is moved or altered, a mismatching copy is kept, or an ambiguous match is attached."
+    level: fail
+    enforced_by: tier1.attach_supplement
+    audit: [CONTRACTS-2.5]
+  - id: IN-10
+    stage: IN
+    rule: "An identical incoming PDF (same SHA-256) joins the canonical paper and the extra copy is quarantined recoverably, never deleted."
+    vi: "File PDF y hệt (cùng mã băm) được gắn vào bài đã có; bản thừa được cách ly để khôi phục được, không xóa."
+    pass: "The extra copy is found in the review quarantine folder and the paper count is unchanged."
+    fail: "An identical PDF creates a second paper or is deleted."
+    level: fail
+    enforced_by: ingest._quarantine
+    audit: [CONTRACTS-9, AGENTS-duplicates]
+
+  # ---------------------------------------------------------------- CHR
+  - id: CHR-01
+    stage: CHR
+    rule: "All stored and generated text is Unicode NFC; text in other forms is normalised on input and never bypasses a check."
+    vi: "Mọi văn bản lưu và sinh ra ở dạng NFC; dạng khác phải chuẩn hóa ngay khi nhận."
+    pass: "unicodedata.normalize('NFC', s) == s for every stored sentence, note and answer; an NFD answer is judged like its NFC form."
+    fail: "A stored text or an answer differs from its NFC form, or an NFD answer passes a check that the NFC form fails."
+    level: fail
+    enforced_by: conform_intake.all_text_is_nfc
+    audit: [N03]
+  - id: CHR-02
+    stage: CHR
+    rule: "Stored sentences contain no replacement character U+FFFD, private-use character or control character (including backspace 0x08) other than newline, carriage return and tab."
+    vi: "Câu lưu không được chứa ký tự thay thế, ký tự riêng hay ký tự điều khiển (kể cả 0x08)."
+    pass: "A scan of sentences.jsonl finds 0 such characters."
+    fail: "At least one such character is found in a stored sentence."
+    level: fail
+    enforced_by: quality.inspect
+    audit: [P4-14, A-chars]
+  - id: CHR-03
+    stage: CHR
+    rule: "Text files are written with LF only (.bat files keep CRLF); a CRLF received from a client is converted before saving."
+    vi: "File văn bản chỉ dùng kiểu xuống dòng LF (riêng file .bat giữ CRLF)."
+    pass: "No stored .md/.json/.jsonl/.yaml/.py file contains a carriage return."
+    fail: "A carriage return is found in a generated note or store file."
+    level: fail
+    enforced_by: conform_intake.only_lf
+    audit: [CONTRACTS-0.6]
+  - id: CHR-04
+    stage: CHR
+    rule: "Look-alike symbols are matched as one for search and display (delta forms, degree/ring forms such as C, degree-C), while the stored source text stays as extracted."
+    vi: "Các ký hiệu giống nhau (Δ/∆, °C/◦C/℃) được coi là một khi tìm kiếm; văn bản gốc lưu giữ nguyên."
+    pass: "A query using one delta or degree form finds sentences that use the other, and the stored text is unchanged."
+    fail: "The search misses a sentence because of a delta/degree variant, or the stored text was rewritten (today the code folds only the degree forms, not delta)."
+    level: warn
+    enforced_by: sentences.fold_search_glyphs
+    audit: [A-E, P2-8]
+  - id: CHR-05
+    stage: CHR
+    rule: "A character problem that can change a number (lost times sign, lost P, 10?5, decimal comma read as ^0) is checked against the PDF or flagged needs_pdf_check; the number is never guessed."
+    vi: "Ký tự hỏng có thể đổi con số (mất ×, mất P, 10?5...) thì phải đối chiếu PDF hoặc gắn cờ cần kiểm PDF, không đoán."
+    pass: "Every sentence whose number depends on a repaired or suspect character is either PDF-verified or carries needs_pdf_check."
+    fail: "A suspect number-bearing sentence has neither a PDF check nor the flag, or the code guessed the value."
+    level: fail
+    enforced_by: G3
+    audit: [P4-19, A-chars]
+  - id: CHR-06
+    stage: CHR
+    rule: "Only verified font-glyph repairs are applied (checked against the immutable PDF); an unverified symbol-font code stays unchanged and raises selftest warning FS2."
+    vi: "Chỉ sửa ký tự phông khi đã đối chiếu PDF; mã chưa chắc giữ nguyên và bị cảnh báo."
+    pass: "Every repair is in the verified map; unmapped symbol-font codes appear as FS2 warnings."
+    fail: "A repair outside the verified map is applied."
+    level: fail
+    enforced_by: selftest.check_paper
+    audit: [CONTRACTS-2.0]
+  - id: CHR-07
+    stage: CHR
+    rule: "A superscript run is stored as ^run, and the citation reader tells a citation (stroke.^1,7-10) from a number or unit (10^5, cm^2, SSEA-3^+)."
+    vi: "Chỉ số mũ viết dạng ^…; máy phân biệt trích dẫn với con số/đơn vị."
+    pass: "On the fixture set, citation superscripts are read as citations and 10^5, cm^2, SSEA-3^+ are not."
+    fail: "A numeric or unit superscript is read as a citation, or a citation superscript is lost."
+    level: fail
+    enforced_by: sentences.find_citations
+    audit: [CONTRACTS-2.0]
+  - id: CHR-08
+    stage: CHR
+    rule: "A page read by OCR (fewer than ocr.min_page_chars characters and an image) records its provenance (engine, dpi, mean confidence) and is listed in metadata.ocr_pages; numbers read by OCR need PDF verification."
+    vi: "Trang phải đọc bằng OCR thì ghi rõ cách đọc và độ tin cậy; con số đọc bằng OCR phải đối chiếu với PDF."
+    pass: "Every OCR passage lies on a recorded OCR page with an engine, and low-confidence OCR blocks analysis."
+    fail: "An OCR passage has no recorded page or engine, or low-confidence OCR text is analysed."
+    level: fail
+    enforced_by: selftest.check_paper
+    audit: [CONTRACTS-2.0, CONTRACTS-2.7]
+
+  # ---------------------------------------------------------------- CH
+  - id: CH-01
+    stage: CH
+    rule: "Sentence splitting never breaks at et al., Fig., e.g., i.e., vs., cf., initials or decimals, nor before a lower-case word."
+    vi: "Không cắt câu sau et al., Fig., e.g., vs., chữ viết tắt tên, số thập phân, hay trước chữ thường."
+    pass: "The parser examples of kb.py selftest all pass and the fixture error rate is 0."
+    fail: "A split occurs at one of the listed positions."
+    level: fail
+    enforced_by: sentences.split_sentences
+    audit: [CONTRACTS-2.2]
+  - id: CH-02
+    stage: CH
+    rule: "No orphan fragment: a stored sentence that starts lower-case or ends cut off must carry a correct continues link, otherwise it is a defect."
+    vi: "Không có mảnh câu mồ côi (đầu viết thường hoặc đuôi cụt) mà không có liên kết nối tiếp đúng."
+    pass: "Count of unlinked head or tail fragments = 0 on the fixtures and is reported per paper on the real store."
+    fail: "A head fragment (13 known) or tail fragment (22 known; 35 in all) without a correct continues link exists."
+    level: fail
+    enforced_by: conform_chunk.no_orphan_fragments
+    audit: [A-chunking, P4-15]
+  - id: CH-03
+    stage: CH
+    rule: "A continues link joins the real two halves of one sentence (same flow of text across a page, column or figure break) and never a body sentence to a table cell, heading or an unrelated sentence."
+    vi: "Liên kết nối câu chỉ nối hai nửa của cùng một câu; không nối vào ô bảng, tiêu đề hay câu khác."
+    pass: "For every link, the head ends without terminal punctuation and the target continues it; no link target is a table_row or heading."
+    fail: "A link joins unrelated sentences (15 known, e.g. a link that skips the true next part) or targets a table cell or heading."
+    level: fail
+    enforced_by: conform_chunk.continues_links_are_real
+    audit: [A-chunking, P4-15]
+  - id: CH-04
+    stage: CH
+    rule: "A passage is never cut in the middle of a sentence; the flush at about 1000 characters waits for a sentence end."
+    vi: "Không cắt đoạn giữa chừng một câu."
+    pass: "Every passage ends at a sentence boundary or a continues link is stored."
+    fail: "A passage ends mid-sentence without a link."
+    level: fail
+    enforced_by: conform_chunk.passages_end_at_a_sentence_boundary
+    audit: [P4-16]
+  - id: CH-05
+    stage: CH
+    rule: "Table text is separated from running text: table rows are table_row sentences, flattened table text is marked in_table, and a caption or table cell is never glued to a body sentence."
+    vi: "Chữ trong bảng tách khỏi văn xuôi; bảng đổ thành câu thì đánh dấu in_table; chú thích/ô bảng không dính vào câu thân bài."
+    pass: "No body sentence contains a caption or cell fragment, and every flattened table is flagged in_table (also 0-row tables)."
+    fail: "A table was dumped as one sentence (63 known) or a caption or cell is glued to a body sentence (32 known)."
+    level: fail
+    enforced_by: conform_chunk.tables_apart_from_running_text
+    audit: [A-chunking, P4-17]
+  - id: CH-06
+    stage: CH
+    rule: "A table has its header from row 0, no record split over two rows, and a quality value; tables with 0 rows or an empty header are flagged uncertain."
+    vi: "Bảng phải có tiêu đề cột đúng, không bị chia đôi bản ghi; bảng 0 dòng hoặc thiếu tiêu đề gắn cờ không chắc."
+    pass: "Header is non-empty for quality ok tables, and no row is the continuation of another row."
+    fail: "A table marked ok has an empty header (9 known), a record split in two (14 known), or a 0-row table is not flagged (13 known)."
+    level: fail
+    enforced_by: conform_chunk.tables_have_header_and_flag
+    audit: [A-tables, P4-17]
+  - id: CH-07
+    stage: CH
+    rule: "Sections follow printed headings; a review article takes its subsection names from its sub-headings; body text is never assigned to references, front_matter or a wrong section."
+    vi: "Mục theo đúng heading in trong bài; bài tổng quan lấy tên mục từ heading con; thân bài không bị gán nhầm vào mục tài liệu tham khảo hay phần đầu trang."
+    pass: "No body sentence is in references/front_matter, no paper with printed sub-headings has its whole body under introduction, and a body that stays main_text is flagged only when none of its sentences carries a subsection (a review whose sentences carry the printed sub-headings as subsection passes)."
+    fail: "Body text sits in references or front_matter, or a paper's whole body is introduction while a sentence carries a subsection, or a paper's whole body is main_text and no sentence carries a subsection."
+    level: fail
+    enforced_by: conform_chunk.sections_follow_the_text
+    audit: [A-sections, P4-18]
+  - id: CH-08
+    stage: CH
+    rule: "Layout interruptions are recognised by structural signals only (position, font, repetition), never by words such as University, sentence length or number density."
+    vi: "Nhận chân trang/đầu trang chỉ bằng dấu hiệu cấu trúc, không bằng từ như University hay số lượng chữ số."
+    pass: "No body sentence is treated as layout because of its words, length or digits."
+    fail: "A body sentence is skipped as layout for such a reason."
+    level: fail
+    enforced_by: conform_chunk.probe_layout_signals
+    audit: [P4-15]
+  - id: CH-09
+    stage: CH
+    rule: "Citation markers are exact text slices, author-year citations are captured, affiliation marks are not citations, and every high-confidence ref_num exists in references (invariants I1-I4)."
+    vi: "Trích dẫn trong câu bắt đúng (cả tác giả-năm), dấu cơ quan không bị coi là trích dẫn, số tham chiếu có trong danh sách tài liệu."
+    pass: "I1 passage slice equals sentence text; I2 seq 1..n; I3 ref_nums exist; I4 no citations in references; author-year count per paper has 0 lost."
+    fail: "An invariant breaks, 50 author-year citations are lost (regex backspace), or an affiliation mark is read as a citation (10 known)."
+    level: fail
+    enforced_by: selftest.check_paper
+    audit: [P4-14, A-citations]
+  - id: CH-10
+    stage: CH
+    rule: "The reference parser keeps hyphenated author names whole and writes a field as null rather than guessing it."
+    vi: "Danh sách tài liệu tham khảo: tên có gạch nối giữ nguyên; trường không biết thì để trống."
+    pass: "On the fixtures a hyphenated surname is parsed whole."
+    fail: "A hyphenated name is truncated (58 references known)."
+    level: warn
+    enforced_by: conform_chunk.probe_hyphenated_names
+    audit: [P4-14]
+  - id: CH-11
+    stage: CH
+    rule: "Re-extraction is done paper by paper with a dry-run first; it proceeds only when lost_total is 0, and carries over IDs by exact text (renumber) with the old files kept in tier1_history."
+    vi: "Trích lại từng bài, chạy thử trước; chỉ chạy thật khi không mất chữ nào; mã câu cũ được đổi sang mã mới và file cũ được giữ lại."
+    pass: "Dry-run shows text_preservation.lost_total = 0 and a recoverable tier1_history/<uuid> exists after the real run (the code measures lost_total; refusing a run with lost_total > 0 is G3)."
+    fail: "A real run starts with lost_total > 0, or the old files cannot be restored."
+    level: fail
+    enforced_by: renumber.text_preservation
+    audit: [CONTRACTS-2.7]
+  - id: CH-12
+    stage: CH
+    rule: "Searchable full text is preserved whenever extraction is possible: no passage is discarded because a model finds it unimportant, and page furniture leaves passages but stays in page text."
+    vi: "Giữ toàn văn tìm được ở mức đầy đủ nhất có thể; không bỏ đoạn nào chỉ vì cho là không quan trọng; chữ đầu/cuối trang rời khỏi đoạn nhưng vẫn giữ trong văn bản trang."
+    pass: "Every extracted page has its text in pages.jsonl and every body sentence is in sentences.jsonl; text_preservation.lost_total is 0 after any re-extraction."
+    fail: "Body text present in pages.jsonl is missing from sentences.jsonl, or text was dropped by a relevance judgement."
+    level: fail
+    enforced_by: conform_chunk.page_text_is_in_sentences
+    audit: [AGENTS-fulltext, CONTRACTS-2.0]
+
+  # ---------------------------------------------------------------- EV
+  - id: EV-01
+    stage: EV
+    rule: "V1: an evidence unit has a valid unit_type, an English statement and 1-6 existing sentence IDs of its own paper forming one place, never the reference list."
+    vi: "Mỗi đơn vị bằng chứng có loại hợp lệ, câu tiếng Anh, và 1-6 mã câu có thật của bài, nằm gần nhau, không lấy từ danh sách tài liệu."
+    pass: "unit_type is allowed, statement is English (>= 10 chars), IDs exist, and the IDs are in one passage, within 5 body sentences, or all rows of one table."
+    fail: "Any of those conditions is broken; the unit is rejected."
+    level: fail
+    enforced_by: evidence.validate
+    audit: [V1]
+    params: {max_sentence_ids: 6, max_gap_body_sentences: 5}
+  - id: EV-02
+    stage: EV
+    rule: "V2: every number in statement, values, n and p occurs in the cited sentences (citation markers blanked), with its sign."
+    vi: "Mọi con số trong phát biểu phải có trong câu nguồn được dẫn, đúng cả dấu âm/dương."
+    pass: "Each number of statement/values/n/p is found in the cited sentences."
+    fail: "A number is absent from the cited sentences (the unit is rejected) or a minus sign was dropped (warning)."
+    level: fail
+    enforced_by: evidence.validate
+    audit: [V2]
+  - id: EV-03
+    stage: EV
+    rule: "V3: species, cell type, agent, measure, method and terms appear in the paper, in its own wording or a registered synonym."
+    vi: "Loài, loại tế bào, tác nhân, đại lượng, phương pháp phải xuất hiện trong bài."
+    pass: "Each named entity matches the paper text by stem, species synonym, synonym group, MeSH entry term or word by word."
+    fail: "An entity is not found in the paper (the unit is flagged)."
+    level: warn
+    enforced_by: evidence.validate
+    audit: [V3]
+  - id: EV-04
+    stage: EV
+    rule: "V4: a result unit comes from a primary paper's Results (or a table row), never from a review paper."
+    vi: "Kết quả (result) phải lấy từ phần Results của bài gốc, không lấy từ bài tổng quan."
+    pass: "Every result unit cites a results/results_discussion/supplementary sentence of a non-review paper."
+    fail: "A result unit is attached to a review paper or to a non-result section."
+    level: warn
+    enforced_by: evidence.validate
+    audit: [V4]
+  - id: EV-05
+    stage: EV
+    rule: "V5: a hedge in the source is kept; hedged source wording never becomes definitive or causal wording, and association never becomes causation."
+    vi: "Giữ nguyên mức chắc chắn của nguồn: 'có thể/gợi ý/có liên quan' không được thành 'gây ra/chứng minh'."
+    pass: "A unit citing a hedged sentence has hedging = hedged and no causal or definitive verb that the source lacks."
+    fail: "A causal or definitive verb appears over hedged source wording."
+    level: warn
+    enforced_by: evidence.validate
+    audit: [V5, AGENTS-citation]
+    params: {lexicon: config/hedge_lexicon.yaml}
+  - id: EV-06
+    stage: EV
+    rule: "Hedging is judged on the sentence that carries the unit's main claim (hedged_sentence_ids), not on every sentence of the unit; non-significance is its own category and is not a hedge."
+    vi: "Mức chắc chắn tính theo câu mang nhận định chính, không theo cả đơn vị; 'không có ý nghĩa thống kê' là nhóm riêng."
+    pass: "A unit is hedged only when the main-claim sentence is hedged; p > 0.05 is category non_significance and associated with used as a location is not a hedge."
+    fail: "A unit is hedged because of another sentence (61 known, 33 results), e.g. 'could be seen' elsewhere in the unit, or 'associated with' used as a location x19."
+    level: fail
+    enforced_by: conform_evidence.hedged_only_by_the_main_claim
+    audit: [P1-5, A-hedge]
+    params: {lexicon: config/hedge_lexicon.yaml}
+  - id: EV-07
+    stage: EV
+    rule: "V6: a sentence that cites other papers is not a result; a cited_statement names its source, lists cited_refs that the sentence really cites, and is written as attribution."
+    vi: "Câu đang trích bài khác không được làm 'kết quả'; 'cited_statement' phải ghi rõ nguồn trích."
+    pass: "No result cites a sentence with citations; every cited_statement has valid cited_refs and attribution wording."
+    fail: "A result cites a citing sentence, or a cited_statement has missing or unrelated refs (rejected) or no attribution wording (flagged)."
+    level: fail
+    enforced_by: evidence.validate
+    audit: [V6]
+  - id: EV-08
+    stage: EV
+    rule: "V7: outcome.direction agrees with the source wording (increase, decrease, no_change, mixed, not_applicable)."
+    vi: "Hướng thay đổi (tăng/giảm/không đổi) phải khớp câu nguồn."
+    pass: "Direction matches the wording after location words are ignored."
+    fail: "Direction contradicts the wording (flagged)."
+    level: warn
+    enforced_by: evidence.validate
+    audit: [V7]
+  - id: EV-09
+    stage: EV
+    rule: "V8: every must-cover sentence of a body section is used by a unit or skipped with a specific reason; a continues chain counts as one sentence."
+    vi: "Mọi câu thân bài phải được dùng hoặc bỏ có lý do cụ thể."
+    pass: "coverage_missing is empty."
+    fail: "A must-cover sentence is neither cited nor skipped with a reason (sent back)."
+    level: fail
+    enforced_by: evidence.validate
+    audit: [V8]
+  - id: EV-10
+    stage: EV
+    rule: "V9: terms are normalised to one canonical English name and one type; a new result or method_detail unit has at least one scientific term list."
+    vi: "Thuật ngữ về một tên chuẩn và một loại; kết quả/phương pháp mới phải có ít nhất một danh sách thuật ngữ."
+    pass: "All terms resolve in the one-type registry and result/method_detail units have a non-empty list."
+    fail: "A term has two types or a result unit has no scientific term (rejected)."
+    level: fail
+    enforced_by: evidence.validate
+    audit: [V9]
+  - id: EV-11
+    stage: EV
+    rule: "V10: a submission carries classification (CORE, CONNECTED, POTENTIAL_BRIDGE, UNCERTAIN, OUT_OF_SCOPE), reason, evidence_type, analyst, matching paper_id and a non-empty units list; an unconnected paper is not rejected for that alone."
+    vi: "Bài nộp phải có phân loại, lý do, loại bằng chứng, người phân tích; bài chưa nối được với vault không bị loại chỉ vì thế."
+    pass: "All required submission fields are present and valid."
+    fail: "A required field is missing (nothing is stored)."
+    level: fail
+    enforced_by: evidence.validate
+    audit: [V10, AGENTS-classification]
+  - id: EV-12
+    stage: EV
+    rule: "V11: result and method_detail units cite data (a table row, or non-in_table text of results, results_discussion, supplementary, methods, abstract or main text), not a caption or title."
+    vi: "Kết quả và phương pháp phải dẫn câu dữ liệu, không dẫn chú thích hay tiêu đề."
+    pass: "Every result/method_detail cites data sentences."
+    fail: "A result cites a caption or title (rejected)."
+    level: fail
+    enforced_by: evidence.validate
+    audit: [V11, B-caption-numbers]
+  - id: EV-13
+    stage: EV
+    rule: "V12: value_source figure_only carries no values, n or p (numbers are never read off a figure); value_source table cites a table row."
+    vi: "Số đọc từ hình thì không được ghi giá trị; nguồn là bảng thì phải dẫn dòng bảng."
+    pass: "figure_only units have empty values/n/p; table units cite table rows."
+    fail: "A figure_only unit has numbers, or a table unit has no row (rejected)."
+    level: fail
+    enforced_by: evidence.validate
+    audit: [V12]
+  - id: EV-14
+    stage: EV
+    rule: "V13: a second model checks statement against the verbatim quote (supported, partly, not_supported); the last two flag the unit."
+    vi: "Một mô hình thứ hai kiểm phát biểu so với câu nguồn; không ủng hộ thì gắn cờ."
+    pass: "Units with a current analysis_v13 report have supported or are flagged."
+    fail: "A not_supported unit is shown without a flag."
+    level: warn
+    enforced_by: crosscheck.run
+    audit: [V13]
+  - id: EV-15
+    stage: EV
+    rule: "V14: a unit whose cited sentence is missing or whose stored quote or sections differ from the current sentences is flagged source drift; the cited ID is never rewritten to a guess."
+    vi: "Nếu câu nguồn đã đổi hoặc mất thì đơn vị bị gắn cờ; không tự đoán mã mới."
+    pass: "recheck leaves no unflagged drifted unit."
+    fail: "A drifted unit stays ok, or an ID was rewritten without an exact text match."
+    level: fail
+    enforced_by: evidence.recheck
+    audit: [V14, E1]
+  - id: EV-16
+    stage: EV
+    rule: "Agents give sentence IDs only; the stored quote is copied by code from the cited sentences, in order, with the gap marker only between non-adjacent sentences, never inside two halves joined by continues."
+    vi: "AI chỉ đưa mã câu; trích dẫn nguyên văn do code chép, không chèn […] giữa hai nửa của một câu."
+    pass: "quote equals the code-rebuilt text and contains no gap marker inside a continues chain."
+    fail: "A quote differs from the rebuild (E1) or has a gap marker inside one sentence (65 known)."
+    level: fail
+    enforced_by: evidence._quote
+    audit: [P1-6, A-quote, AGENTS-rule9]
+  - id: EV-17
+    stage: EV
+    rule: "A result unit states its intervention or agent, outcome measure, direction, species and condition; where the sentence or paper names them, code fills them (filled_by: rule) before AI, and an AI fills only what stays ambiguous."
+    vi: "Mỗi kết quả ghi rõ tác nhân, đại lượng, hướng, loài, điều kiện; chỗ nào đọc được thì code điền trước, AI chỉ điền phần mơ hồ."
+    pass: "Result units with an empty direction or species are <= the agreed limit and each filled field records filled_by."
+    fail: "Direction or species are missing on most results (94% / 100% for one analyst, 84% / 73% for another)."
+    level: fail
+    enforced_by: conform_evidence.results_state_direction_and_species
+    audit: [A-§B-fields]
+    params: {max_empty_direction_share: 0.05, max_empty_species_share: 0.05}
+  - id: EV-18
+    stage: EV
+    rule: "One unit holds one finding: a sentence that reports two outcomes is split into two units citing the same sentence, and a bundled direction never compresses mixed results."
+    vi: "Một đơn vị = một kết quả; câu có hai kết quả thì tách hai đơn vị."
+    pass: "No unit has one direction for statements that report opposite outcomes."
+    fail: "A bundled result carries a single direction (one bundled conclusion, one result without a control group)."
+    level: fail
+    enforced_by: conform_evidence.one_finding_per_unit
+    audit: [B-bundled-result, B-no-control-group]
+  - id: EV-19
+    stage: EV
+    rule: "A statement adds no content beyond its cited sentences: every concept, entity and number in it occurs in them."
+    vi: "Phát biểu không được thêm nội dung nằm ngoài câu nguồn."
+    pass: "Every content term of the statement occurs in the cited sentences or their registered synonyms."
+    fail: "The statement names something the sentences do not (an added mechanism phrase, an added P value)."
+    level: fail
+    enforced_by: conform_evidence.statement_adds_no_content
+    audit: [B-added-content]
+  - id: EV-20
+    stage: EV
+    rule: "A unit that rests on a figure whose reading is flagged inconsistent carries that flag."
+    vi: "Đơn vị dựa trên hình bị gắn cờ không nhất quán thì cũng mang cờ đó."
+    pass: "Every unit citing an object with a red figure-reading warning shows the warning."
+    fail: "A flagged figure's warning is not passed on to a unit using it (13 known cases)."
+    level: fail
+    enforced_by: conform_evidence.figure_warnings_reach_units
+    audit: [A-figure-flags]
+  - id: EV-21
+    stage: EV
+    rule: "Exact duplicate evidence inside one paper is merged reversibly (aliases keep old IDs); units differing in model, dose, outcome or hedging are never merged."
+    vi: "Chỉ gộp đơn vị giống hệt trong cùng bài và gộp được hoàn tác; khác mô hình, liều, kết quả, mức chắc chắn thì không gộp."
+    pass: "Merged IDs resolve through evidence_aliases and no merge crosses a differing field."
+    fail: "Two non-identical units are merged or an alias chain cannot be resolved."
+    level: fail
+    enforced_by: evidence.resolve_unit
+    audit: [CONTRACTS-9]
+  - id: EV-22
+    stage: EV
+    rule: "Hedge words come from one vocabulary, config/hedge_lexicon.yaml; no module keeps its own list."
+    vi: "Từ chỉ mức chắc chắn chỉ có một danh sách duy nhất trong config."
+    pass: "evidence, structure, answer all read hedges.py (true today for English); no second hedge list is found in code."
+    fail: "A module defines its own hedge list (answer.VI_HEDGE was a second, Vietnamese list before G3)."
+    level: warn
+    enforced_by: hedges.load
+    audit: [PLAN-G3]
+    params:
+      lexicon: config/hedge_lexicon.yaml
+      min_hedge_words: 3
+      min_hedge_share: 0.3
+      # A collection that holds hedge-lexicon words but is no hedge vocabulary. `item` is one exact string the collection
+      # holds (not a line number). Another hedge list in the same file is still reported. (D-PENDING-3, 2026-10-18)
+      exceptions:
+        - {file: scripts/kbsys/result_notes.py, item: associated_with, reason: "outcome.direction labels (associated, correlated ...) normalised to a relation name, not hedge detection"}
+        - {file: scripts/kbsys/vault_layout.py, item: "HYP - ", reason: "the Hypothesis note template (field values and Vietnamese headings), not a hedge vocabulary"}
+        - {file: scripts/accept_requirements.py, item: look like, reason: "P15 sample words that the lexicon must match; a test input, not a classifier"}
+  - id: EV-23
+    stage: EV
+    rule: "Canonical knowledge (statements, terms, stored quotes) is English and original English evidence is never changed; an explanation in another language never replaces it."
+    vi: "Tri thức chuẩn (phát biểu, thuật ngữ, trích dẫn) lưu bằng tiếng Anh, không sửa nguyên văn; lời giải thích bằng tiếng Việt không thay thế bản chuẩn."
+    pass: "Every statement is English (no Vietnamese letters) and every stored quote equals the source sentence text."
+    fail: "A statement contains Vietnamese letters, or a quote is translated or edited."
+    level: fail
+    enforced_by: evidence.validate
+    audit: [AGENTS-language, V1, E1]
+
+  # ---------------------------------------------------------------- SP
+  - id: SP-01
+    stage: SP
+    rule: "WH1: the introduction profile has exactly the keys what, why, who, where, when; each is a text with sentence IDs (quotes copied by code) or null with a reason."
+    vi: "Hồ sơ phần mở đầu có đúng 5 mục what, why, who, where, when; mỗi mục có câu nguồn hoặc để trống kèm lý do."
+    pass: "Five keys present; every non-null answer cites Introduction sentences."
+    fail: "A key is missing, an answer has no sentence ID, or null has no reason."
+    level: fail
+    enforced_by: structure.submit_profile
+    audit: [WH1]
+  - id: SP-02
+    stage: SP
+    rule: "G1 grounding: an English profile text may not contain an opposite direction word, a specific organism, a gene-like token or a unit number that is absent from its cited sentences."
+    vi: "Văn bản hồ sơ không được thêm hướng ngược, loài, gen, hoặc con số không có trong câu dẫn."
+    pass: "Every such token of the text occurs in the cited sentences (or is a defined acronym matching its expansion)."
+    fail: "A token is absent from the cited sentences (rejected)."
+    level: fail
+    enforced_by: structure.submit_profile
+    audit: [G1]
+  - id: SP-03
+    stage: SP
+    rule: "A7_setting: who, where and when answers keep the setting wording of the source; a null answer never means 'does not exist in the literature'."
+    vi: "Mục ai/ở đâu/khi nào giữ nguyên bối cảnh của nguồn; để trống không có nghĩa là không tồn tại trong y văn."
+    pass: "A7_setting warnings are 0 and every null carries 'not found in this paper' wording."
+    fail: "A setting is dropped or a null is worded as absence from the literature."
+    level: warn
+    enforced_by: structure.submit_profile
+    audit: [A7_setting, AGENTS-gaps]
+  - id: SP-04
+    stage: SP
+    rule: "A protocol profile lists ordered Methods protocols; names and values are exact Methods fragments on whole-token boundaries (5 mg not inside 15 mg), source order is kept and unknown stays unknown."
+    vi: "Hồ sơ quy trình: tên và giá trị là đoạn nguyên văn của Methods theo đúng thứ tự; cái gì không biết thì không đoán."
+    pass: "Each name/value is a whole-token fragment of its cited Methods sentences; missing fields are absent."
+    fail: "A value is not a whole-token fragment, order changed, or a dose/instrument was guessed."
+    level: fail
+    enforced_by: structure.submit_protocol
+    audit: [CONTRACTS-5]
+  - id: SP-05
+    stage: SP
+    rule: "Protocol coverage is complete or each uncovered Methods sentence is skipped with a reason; a review without Methods uses source_absence_reason that says the cited studies may still have protocols."
+    vi: "Mọi câu Methods được phủ hoặc bỏ có lý do; bài tổng quan không có Methods ghi rõ lý do vắng mặt."
+    pass: "coverage_missing is empty and an absent Methods section has source_absence_reason."
+    fail: "A Methods sentence is uncovered without reason, or absence is stated as 'no protocols exist'."
+    level: fail
+    enforced_by: structure.submit_protocol
+    audit: [CONTRACTS-5]
+  - id: SP-06
+    stage: SP
+    rule: "The paper overview is reference-only: each item has text, sentence IDs and a certainty copied from the source wording, a hedge in a cited sentence stays, and empty overviews or unknown keys are rejected."
+    vi: "Tổng quan bài chỉ để tham khảo; mỗi mục có câu nguồn và giữ đúng mức chắc chắn của nguồn."
+    pass: "reference_only is true, every item has sentence IDs and the source hedge word in certainty."
+    fail: "An item lacks IDs, drops a hedge, or the overview is empty."
+    level: fail
+    enforced_by: structure.submit_overview
+    audit: [CONTRACTS-5]
+  - id: SP-07
+    stage: SP
+    rule: "Every profile echoes source_sha256 and source_revision of the paper; a reply for a stale source is refused, never rebased."
+    vi: "Mọi hồ sơ ghi mã nguồn hiện tại; trả lời cho nguồn cũ bị từ chối."
+    pass: "A reply with an old source_revision is refused."
+    fail: "A stale reply is stored."
+    level: fail
+    enforced_by: structure.submit_structured
+    audit: [CONTRACTS-5]
+  - id: SP-08
+    stage: SP
+    rule: "A paper is complete only when evidence is done, all five WH answers exist and the protocol is done, all on the current source; this is technical completeness, never scientific acceptance."
+    vi: "Bài chỉ 'xong' khi có đủ bằng chứng, 5 mục WH và quy trình; đó là xong về kỹ thuật, không phải khoa học được duyệt."
+    pass: "demo3_complete is true only with the three parts current, and scientific_acceptance stays not_assessed."
+    fail: "A paper is marked complete with a missing or stale part, or marked scientifically accepted by software."
+    level: fail
+    enforced_by: structure.completion
+    audit: [AGENTS-approval]
+  - id: SP-09
+    stage: SP
+    rule: "Structured tasks use chunks of at most 32 sentences and 12000 characters, split only on sentence IDs and never inside a continues chain."
+    vi: "Mỗi lượt giao việc tối đa 32 câu / 12000 ký tự, không cắt giữa chuỗi câu nối."
+    pass: "No chunk exceeds the limits or ends inside a continues chain."
+    fail: "A chunk exceeds a limit or cuts a chain."
+    level: fail
+    enforced_by: structure.prepare_structured
+    audit: [CONTRACTS-5]
+    params: {max_sentences: 32, max_chars: 12000}
+
+  # ---------------------------------------------------------------- FG
+  - id: FG-01
+    stage: FG
+    rule: "A figure or table reading matches the caption to the image; a wrong crop is reported as crop_wrong and the object leaves the queue until the crop is rebuilt."
+    vi: "Đọc hình phải khớp chú thích; cắt sai thì báo crop_wrong và chờ cắt lại."
+    pass: "Every reading either describes the cropped image or is crop_wrong with a note."
+    fail: "A reading describes a different image than the crop."
+    level: fail
+    enforced_by: figure_reading.submit
+    audit: [CONTRACTS-8.7]
+  - id: FG-02
+    stage: FG
+    rule: "Numbers in caption_consistency notes occur in the cited sentence or in a panel value; numbers are never read off the image alone."
+    vi: "Con số trong ghi chú nhất quán phải có trong câu dẫn hoặc giá trị panel; không đọc số từ ảnh."
+    pass: "Each number of a note occurs in the cited sentence or a panel value."
+    fail: "A number appears in no source text."
+    level: fail
+    enforced_by: figure_reading.submit
+    audit: [skill-ai-analysis-submit]
+  - id: FG-03
+    stage: FG
+    rule: "A caption-versus-figure inconsistency is shown wherever the figure is used (paper note, node note, dashboard, answer WARNING line) and is passed on to units that rely on it."
+    vi: "Hình lệch chú thích phải hiện ở mọi nơi dùng hình và truyền sang đơn vị bằng chứng liên quan."
+    pass: "figure_reading.warning appears in each place and in the unit's flags."
+    fail: "A flagged figure is shown without its warning (unit flags missing today)."
+    level: fail
+    enforced_by: figure_reading.sentence_warnings
+    audit: [A-figure-flags, STATUS-14]
+  - id: FG-04
+    stage: FG
+    rule: "A figure reading is current only while the crop hash and the cited caption/mention text hash match; n/N (%) cells are split into value, count and n."
+    vi: "Bản đọc hình chỉ còn hiệu lực khi ảnh cắt và câu dẫn không đổi; ô n/N (%) được tách riêng."
+    pass: "A changed crop or cited text marks the reading stale."
+    fail: "A stale reading is served as current."
+    level: warn
+    enforced_by: figure_reading.load
+    audit: [CONTRACTS-2.7]
+  - id: FG-05
+    stage: FG
+    rule: "A figure reading never replaces the caption, the text evidence or the crop, and numbers are never inferred from pixels."
+    vi: "Bản đọc hình không thay chú thích, bằng chứng trong văn bản hay ảnh cắt; không suy con số từ điểm ảnh."
+    pass: "Caption, sentences and crop are unchanged after a reading is stored, and every number in a reading occurs in source text or a panel value."
+    fail: "A reading overwrites a caption, sentence or crop, or carries a number found in no source text."
+    level: fail
+    enforced_by: conform_profile.reading_never_replaces_the_source
+    audit: [CONTRACTS-8.7]
+
+  # ---------------------------------------------------------------- ND
+  - id: ND-01
+    stage: ND
+    rule: "A term maps to the MeSH or registry sense that fits the paper's context; a sense from another field is never used (Vitrification is not Glass Transition, PCA is not Passive Cutaneous Anaphylaxis in a statistics paper, SIRT imaging is not Sirtuins)."
+    vi: "Thuật ngữ phải nối đúng nghĩa theo ngữ cảnh bài (Vitrification không phải Glass Transition, PCA, SIRT...)."
+    pass: "No linked concept has a sense contradicted by the paper; the homonym list blocks the known cases."
+    fail: "A node carries a sense that the paper does not use."
+    level: fail
+    enforced_by: presentation.homonym_blocked
+    audit: [A-concepts, B-concepts]
+    params: {homonyms: config/homonyms.yaml}
+  - id: ND-02
+    stage: ND
+    rule: "An acronym that a paper defines together with its expansion is one concept, and sentences using the acronym link to it within that paper (AMI defined as acute myocardial infarction: 78 sentences of that paper)."
+    vi: "Từ viết tắt do chính bài định nghĩa là cùng một khái niệm với dạng đầy đủ; câu dùng chữ viết tắt cũng được nối vào node."
+    pass: "abbreviation_pairs merges the pair and the acronym sentences of the defining paper appear in the node."
+    fail: "A node lacks the acronym sentences of the paper that defines it."
+    level: fail
+    enforced_by: concepts.abbreviation_pairs
+    audit: [STATUS-13]
+  - id: ND-03
+    stage: ND
+    rule: "Variants of one concept merge into one node: case, hyphen, spaces between letters and Greek symbol versus name (m6A, m 6A, RT-qPCR, beta-tubulin, Blastocoel and Blastocoele, Lyve-1)."
+    vi: "Các cách viết khác nhau của một khái niệm gộp thành một node."
+    pass: "The merge key maps all listed variants to one concept_id."
+    fail: "Two nodes exist for one concept."
+    level: fail
+    enforced_by: concepts.build_registry
+    audit: [B-concepts]
+    params: {parents: config/concept_parents.yaml}
+  - id: ND-04
+    stage: ND
+    rule: "Study words, reagents and phrases never become a species or concept node (Mater from dura mater, Bovine and Fetus from bovine serum, Clinical data)."
+    vi: "Từ chỉ cách làm nghiên cứu, thuốc thử, cụm từ không được thành node loài hay khái niệm."
+    pass: "No node is created from a generic term or from a phrase fragment."
+    fail: "A node exists for such a term."
+    level: fail
+    enforced_by: conform_graph.no_generic_nodes
+    audit: [STATUS-14-item3]
+    params: {generic_terms: config/generic_terms.yaml}
+  - id: ND-05
+    stage: ND
+    rule: "A node shows in a vault only with at least one evidence unit or at least three mentions in that vault's papers."
+    vi: "Node chỉ hiện trong vault khi có ít nhất 1 bằng chứng hoặc được nhắc từ 3 lần trở lên."
+    pass: "Every shown node meets the threshold."
+    fail: "A node below the threshold is shown."
+    level: warn
+    enforced_by: concept_notes.shown_in_vault
+    audit: [STATUS-14]
+    params: {min_evidence: 1, min_mentions: 3}
+  - id: ND-06
+    stage: ND
+    rule: "No orphan node: every shown node has at least one source sentence and a note with content; an empty note (253 bytes, Sphingosine-1-phosphate) is a defect."
+    vi: "Không có node mồ côi hoặc note trống."
+    pass: "Every node note has a non-empty section built from source sentences."
+    fail: "A node exists without source sentences or has an empty note."
+    level: fail
+    enforced_by: conform_graph.no_orphan_or_empty_nodes
+    audit: [D-notes, PLAN-RQ3]
+  - id: ND-07
+    stage: ND
+    rule: "Concept links are built from full text (not references or in_table text) and concept_id values are unique."
+    vi: "Nối khái niệm từ toàn văn (không từ tài liệu tham khảo hay bảng đổ chữ); mã khái niệm không trùng."
+    pass: "selftest finds no duplicate concept_id and relink_paper keeps sentence counts and sections."
+    fail: "Duplicate concept_id, a link built from references or in_table text, or a relink_paper mismatch (only the duplicate-id check is in selftest today)."
+    level: fail
+    enforced_by: selftest.check_concepts
+    audit: [CONTRACTS-6]
+  - id: ND-08
+    stage: ND
+    rule: "All-caps acronyms are case sensitive, and short or ambiguous aliases are ignored."
+    vi: "Chữ viết tắt in hoa phân biệt hoa/thường; bí danh quá ngắn hoặc mơ hồ bị bỏ qua."
+    pass: "EG does not match eg; ITS beats Its only when verbatim."
+    fail: "A short or ambiguous alias links sentences wrongly."
+    level: fail
+    enforced_by: concepts.build_registry
+    audit: [CONTRACTS-6]
+  - id: ND-09
+    stage: ND
+    rule: "A node whose term lists give only the general type concept takes its type from its MeSH tree numbers when every tree number (cell structures A11.284 ignored) maps to one type: A11 cell_type, B01/B03/B04 species, D molecule, E05 method; a mixed or unmapped tree, a specific type, topic and a human-confirmed node never change."
+    vi: "Node chỉ có kiểu chung concept lấy kiểu theo cây MeSH khi mọi mã cây (bỏ A11.284 cấu trúc tế bào) chỉ về một kiểu: A11 tế bào, B01/B03/B04 loài, D phân tử, E05 phương pháp; cây lẫn, kiểu đã cụ thể, topic và node người đã duyệt không đổi."
+    pass: "A fresh build changes the type of exactly the nodes whose build type is concept and whose trees map to one type, each marked classified_by ND-09; a second build changes nothing."
+    fail: "A node with a mixed tree, a specific type, topic or human_confirmed status changes type, or a qualifying concept node keeps the type concept."
+    level: fail
+    enforced_by: concepts.mesh_tree_type
+    audit: [DECISIONS-2026-10-21, PLAN-d-U2]
+    params: {tree_types: {A11: cell_type, B01: species, B03: species, B04: species, D: molecule, E05: method}, ignore: [A11.284], only_from: concept}
+  - id: ND-10
+    stage: ND
+    rule: "A node type, removal, MeSH unlink or added concept decided by a rule or an AI model is one row of knowledge_store/node_decisions.jsonl that names the clause or model that set it and is never marked human-confirmed; an AI row and an added concept cite vault body sentences that the node's name or synonyms match; undo = remove the row and rebuild."
+    vi: "Mỗi quyết định của máy về node (đổi kiểu, bỏ node, gỡ MeSH, thêm khái niệm) là một dòng trong node_decisions.jsonl ghi rõ quy tắc hoặc mô hình AI đã quyết, không bao giờ ghi là người đã duyệt; dòng của AI và khái niệm thêm phải dẫn câu gốc trong vault; muốn hoàn tác thì xóa dòng và dựng lại."
+    pass: "Every stored row passes node_decisions.validate (kb.py node-decision check); a build after removing a row equals the build before it was added."
+    fail: "A machine or AI node decision has no classified_by, is marked human_confirmed, or an AI or add row cites no matching vault body sentence."
+    level: fail
+    enforced_by: node_decisions.validate
+    audit: [DECISIONS-2026-10-20, PLAN-d-U2b]
+
+  # ---------------------------------------------------------------- RL
+  - id: RL-01
+    stage: RL
+    rule: "Every knowledge edge between notes has a type from the agreed list and cites the evidence unit and sentence IDs behind it; edges that only navigate carry the type nav. In a result note only properties and the kb:auto block give typed edges (a conflicts_with property gives a result-to-result conflicts_with edge); links written outside the kb:auto block are nav."
+    vi: "Mỗi cạnh tri thức có kiểu và dẫn đúng đơn vị bằng chứng + câu nguồn; cạnh chỉ để điều hướng gắn nav; trong note kết quả chỉ thuộc tính và khối kb:auto cho cạnh có kiểu, link bạn viết ngoài khối là nav."
+    pass: "100% of knowledge edges have etype, unit_id and sentence_ids."
+    fail: "A knowledge edge has no type or no source."
+    level: fail
+    enforced_by: conform_graph.edges_are_typed_and_sourced
+    audit: [D-graph, P3-12]
+    params: {etypes: [observed_effect, observed_association, tested_mechanism, hypothesis_only, cited_background, same_measure_comparison, conflicts_with, in_taxon, uses_method, nav]}
+  - id: RL-02
+    stage: RL
+    rule: "A contradiction is proposed only for the same outcome, the same intervention agent and opposite directions; a species name alone is never the measured outcome."
+    vi: "Chỉ gọi là mâu thuẫn khi cùng kết quả đo, cùng tác nhân và ngược chiều; tên loài đứng riêng không phải là đại lượng đo."
+    pass: "On the fixtures every proposed pair has equal measure and agent and opposite directions."
+    fail: "A pair mixes different measures or agents (10 of 11 live relations, e.g. two different antioxidants compared on ROS)."
+    level: fail
+    enforced_by: relations.propose
+    audit: [S16-10, B-relations]
+    params: {outcome_quantity_words: [level, levels, content, amount, concentration, intensity, signal, fluorescence, immunofluorescence, rate, frequency]}
+  - id: RL-03
+    stage: RL
+    rule: "Compound conclusions are split by outcome before pairing (a text naming non_outcome_words, such as an enrichment or baseline table, gives no per-entity outcome; a direction word belongs to an entity only when no other predicate from predicate_words, followed by a comma, semicolon or colon, stands between them), and review-table rows and cited statements are considered as 'literature disagreement'."
+    vi: "Kết luận gộp được tách theo kết quả trước khi ghép; dòng bảng của bài tổng quan được xét như bất đồng trong tài liệu."
+    pass: "A pair is formed per outcome."
+    fail: "A bundled unit produces pairs for unrelated outcomes (one bundled conclusion produced 6 wrong relations)."
+    level: fail
+    enforced_by: conform_graph.bundled_conclusions_are_split
+    audit: [B-bundled-result, S16-11]
+    params: {non_outcome_words: [enrichment analysis, enrichment analyses, Gene Ontology, GO analysis, GO analyses, GO term, GO terms, GO function, GO enrichment, enrichment-analysis, KEGG, GSEA, baseline characteristic, baseline characteristics], predicate_words: [was, were, is, are, remain, remains, remained]}
+  - id: RL-04
+    stage: RL
+    rule: "Conflict note titles carry the species of both sides; an empty species field is filled or reported, never taken from the other side."
+    vi: "Tên note mâu thuẫn ghi loài của cả hai bên."
+    pass: "Title species equal each side's own species."
+    fail: "A title shows one species for both sides (H3K9me3 - Mouse for a bovine side)."
+    level: fail
+    enforced_by: conform_graph.conflict_titles_name_both_species
+    audit: [S16-10]
+  - id: RL-05
+    stage: RL
+    rule: "Relations are written, withdrawn and read inside their own vault only; an unknown vault is an error."
+    vi: "Quan hệ chỉ được viết, rút, đọc trong vault của nó; vault lạ báo lỗi."
+    pass: "A rerun for vault A leaves vault B's relations unchanged; list_conflicts of an unknown vault errors."
+    fail: "A cross-vault withdrawal or leak occurs."
+    level: fail
+    enforced_by: relations.conflict_relations
+    audit: [S16-11, N19]
+  - id: RL-06
+    stage: RL
+    rule: "Conflicts are never deleted or hidden: they show in the Conflicting findings section with the tag #conflict, and non-significance is not proof of no effect."
+    vi: "Mâu thuẫn không bị xóa hay ẩn; hiện trong mục Conflicting findings, gắn #conflict; không có ý nghĩa thống kê không có nghĩa là không có tác dụng."
+    pass: "Every active conflict appears in its note and in Open conflicts; effect_vs_no_effect rows carry the non-significance caution."
+    fail: "An active conflict is missing from the note or worded as proof of no effect."
+    level: fail
+    enforced_by: result_notes.refresh
+    audit: [STATUS-14, AGENTS-citation]
+  - id: RL-07
+    stage: RL
+    rule: "Human decisions on a relation (human_confirmed, rejected) and researcher text are never changed by a rerun."
+    vi: "Quyết định của nhà nghiên cứu về quan hệ không bao giờ bị chạy lại ghi đè."
+    pass: "Human-status relations are byte-identical after propose."
+    fail: "A human-status relation changed."
+    level: fail
+    enforced_by: relations.propose
+    audit: [AGENTS-approval]
+  - id: RL-08
+    stage: RL
+    rule: "A gap candidate says 'not found in the current vault', never 'absent from the literature', is judged by concept match (not string equality) and is promoted only by the researcher in a discussion."
+    vi: "Ứng viên khoảng trống nói 'không thấy trong vault', không nói 'chưa có trong y văn'; so khớp theo khái niệm; chỉ nhà nghiên cứu mới duyệt thành knowledge gap."
+    pass: "All gap rows carry the scope note and false 'absent' rows from string-only matching are 0."
+    fail: "About 9 of 23 vitrification rows claim absence wrongly, or a gap is accepted without the researcher."
+    level: fail
+    enforced_by: gaps.generate
+    audit: [B-gaps, AGENTS-gaps]
+  - id: RL-09
+    stage: RL
+    rule: "The network separates knowledge edges from navigation edges and marks hubs (a node present in more than half of the papers) and index maps so they are not used to expand reasoning."
+    vi: "Mạng tách cạnh tri thức khỏi cạnh điều hướng; node xuất hiện ở hơn nửa số bài và các bản đồ chỉ mục được đánh dấu để không dùng mở rộng suy luận."
+    pass: "Hub nodes and MOC notes are marked and absent from hop expansion."
+    fail: "A generic hub (DNA in 15 of 16 papers) takes part in expansion."
+    level: warn
+    enforced_by: conform_graph.probe_hubs_do_not_expand
+    audit: [D-graph, P3-12]
+    params: {hub_share_of_papers: 0.5}
+  - id: RL-10
+    stage: RL
+    rule: "A Result (EVD) note names a subject, a predicate from the agreed list and an object that are real node links, and the node note links back."
+    vi: "Note kết quả có chủ thể, vị từ, đối tượng là link node thật và node có link ngược lại."
+    pass: "Each subject item resolves to an existing node note (the subject_not_stated text only as the sole subject item, when the unit states no subject); each object item resolves to an existing node note; the predicate is one of predicates; each linked node lists the result; a unit without an outcome has no EVD note."
+    fail: "A result note has an empty subject or object (also an empty list), a subject or object item that is no node link, a predicate outside the list or mixed for a result without direction, or a linked node that does not link back."
+    level: fail
+    enforced_by: conform_graph.result_notes_name_subject_predicate_object
+    audit: [D-notes, P3-12]
+    params: {predicates: [increases, decreases, no_significant_change, associated_with, mixed, reports], subject_not_stated: "not stated"}
+  - id: RL-11
+    stage: RL
+    rule: "Cross-paper comparison notes are created when two or more papers measure the same thing, reusing the reviewed measure groups."
+    vi: "Có note so sánh khi từ 2 bài trở lên đo cùng một thứ, dùng lại nhóm đại lượng đã duyệt."
+    pass: "Every measure group with 2+ papers has a comparison note listing each paper's result."
+    fail: "A shared measure has no comparison note."
+    level: warn
+    enforced_by: conform_graph.shared_measures_have_comparison_notes
+    audit: [D-graph, P3-12]
+
+  # ---------------------------------------------------------------- NC
+  - id: NC-01
+    stage: NC
+    rule: "Every node-card statement cites sentence IDs of the node's papers (quotes copied by code); a field with no source is {status: not_found_in_vault}; every common field is present."
+    vi: "Mỗi câu trong thẻ node dẫn mã câu nguồn; trường không có nguồn ghi 'không thấy trong vault'; không bỏ sót trường chung."
+    pass: "All statements have sentence IDs and all common fields exist as a statement or not_found_in_vault."
+    fail: "A statement has no source, a field is missing, or a quote was typed by the agent."
+    level: fail
+    enforced_by: node_cards.submit
+    audit: [skill-ai-analysis-submit, CONTRACTS-8]
+  - id: NC-02
+    stage: NC
+    rule: "Card statements keep the source hedge and attribution (primary, review, author_hypothesis, cited_study), and A3 and A7 apply to them."
+    vi: "Thẻ giữ mức chắc chắn và nguồn gốc (bài gốc, tổng quan, giả thuyết tác giả, bài được trích) của câu nguồn."
+    pass: "No card statement is definitive over a hedged source or loses its attribution."
+    fail: "A hedge is dropped or attribution is wrong."
+    level: fail
+    enforced_by: node_cards.submit
+    audit: [A3, A7]
+  - id: NC-03
+    stage: NC
+    rule: "A card is current until a cited quote changes; the card records the node's full evidence inventory at submit, and a paper or unit outside it makes it current_with_new_evidence."
+    vi: "Thẻ còn hiệu lực đến khi câu được trích thay đổi; có bằng chứng mới ngoài danh sách đã ghi thì báo 'có bằng chứng mới'."
+    pass: "A fresh card is current; new evidence flips it to current_with_new_evidence; a changed quote makes it stale."
+    fail: "A capped card stays current_with_new_evidence forever (fixed in 4a818d7) or a changed quote stays current."
+    level: fail
+    enforced_by: node_cards._card_currency
+    audit: [STATUS-14]
+  - id: NC-04
+    stage: NC
+    rule: "A card note carries the small English line 'AI-written summary from N source sentences, checked automatically.' (researcher 2026-10-19) and card_check: passed; there is no accepted/needs-review status for the researcher to tick."
+    vi: "Thẻ có dòng nhỏ tiếng Anh 'AI-written summary from N source sentences, checked automatically.' và card_check: passed; không bắt nhà nghiên cứu duyệt từng thẻ."
+    pass: "Every shown card has the line and card_check: passed."
+    fail: "A card is shown without it or enters the review queue."
+    level: warn
+    enforced_by: conform_profile.probe_shown_card_says_card_check_passed
+    audit: [PLAN-RQ]
+  - id: NC-05
+    stage: NC
+    rule: "A node task is capped at 500 sentences; a capped node can request specific sentences with include_sentence_ids."
+    vi: "Mỗi lượt viết thẻ tối đa 500 câu; muốn thêm câu cụ thể thì xin theo mã."
+    pass: "Task sentences <= cap and include_sentence_ids are honoured when eligible."
+    fail: "A task exceeds the cap or ignores an eligible include."
+    level: warn
+    enforced_by: node_cards.task
+    audit: [D3.74]
+    params: {max_sentences: 500}
+
+  # ---------------------------------------------------------------- VN
+  - id: VN-01
+    stage: VN
+    rule: "Software writes only inside kb:auto blocks and machine frontmatter keys; human text, Mine/ and custom properties are never changed, and a note whose auto block was edited by hand is left alone."
+    vi: "Phần mềm chỉ ghi trong khối kb:auto và khóa máy; chữ của người, thư mục Mine và thuộc tính tùy chỉnh không bao giờ bị đổi."
+    pass: "Mine/ and text outside kb:auto have identical hashes before and after a rebuild."
+    fail: "Any Mine/ file or human text hash differs."
+    level: fail
+    enforced_by: notes.write_paper_note
+    audit: [AGENTS-human, CONTRACTS-8.1]
+  - id: VN-02
+    stage: VN
+    rule: "Each note type uses its approved English section set in order (concept, method, substance, organism, cell_type, EVD, CLM, CONFLICT, MOC); a section without data is not written."
+    vi: "Mỗi loại note có bộ mục đã duyệt, đúng thứ tự, tiếng Anh; mục rỗng thì ẩn."
+    pass: "heading_problems returns nothing and no empty heading or placeholder bullet exists."
+    fail: "An unapproved or misordered heading, or an empty section, is found."
+    level: fail
+    enforced_by: concept_notes.heading_problems
+    audit: [STATUS-10, CONTRACTS-8.9, CONTRACTS-8.11]
+  - id: VN-03
+    stage: VN
+    rule: "No machine ID (paper:S0123, E0077, F3) appears in a heading or in the running text of a note; IDs live in front matter and the single Source IDs callout."
+    vi: "Không có mã máy trong tiêu đề hay thân note; mã chỉ nằm ở front matter và khối Source IDs."
+    pass: "machine_ids finds 0 in headings and bodies."
+    fail: "An ID appears outside the allowed places."
+    level: fail
+    enforced_by: presentation.machine_ids
+    audit: [N3b]
+  - id: VN-04
+    stage: VN
+    rule: "Notes contain no broken characters, placeholders, raw JSON, None or Python dicts, and no link that differs only by case."
+    vi: "Note không có ký tự hỏng, chữ giữ chỗ, JSON thô, None; link không khác nhau chỉ ở hoa/thường."
+    pass: "note_text_problems finds 0."
+    fail: "A problem is reported."
+    level: fail
+    enforced_by: selftest.note_text_problems
+    audit: [N3e]
+  - id: VN-05
+    stage: VN
+    rule: "Every wikilink in a vault resolves to an existing note or attachment."
+    vi: "Mọi link trong vault đều trỏ tới note hoặc ảnh có thật."
+    pass: "Link edges with status missing = 0."
+    fail: "A missing link exists (2399 reported on 17/10)."
+    level: fail
+    enforced_by: conform_vault.links_resolve
+    audit: [PLAN-VN]
+  - id: VN-06
+    stage: VN
+    rule: "No orphan image: every file in _Attachments is embedded by a note; a duplicate or whole-page caption screenshot found by kb.py image-audit is removed only on the researcher's yes in chat and reversibly, a real figure is attached to its object."
+    vi: "Không có ảnh mồ côi: ảnh nào cũng được note dùng; ảnh lặp hoặc chụp cả trang chú thích (tìm bằng kb.py image-audit) chỉ xóa khi bạn đồng ý trong chat và xóa phải khôi phục được; hình thật thì gắn đúng chỗ."
+    pass: "Unreferenced attachments = 0."
+    fail: "An attachment is not used (24 known)."
+    level: fail
+    enforced_by: conform_vault.no_orphan_image
+    audit: [STATUS-15]
+  - id: VN-07
+    stage: VN
+    rule: "Citations in notes read [[Paper note|Author Year, p. N]]; a quote is copied from sentences.jsonl, and the size caps hold (paper note 120 KiB, node note 60 KiB) by dropping whole lowest-priority rows, never partial quotes."
+    vi: "Trích dẫn trong note đúng dạng [[Bài|Tác giả Năm, p. N]]; câu trích do code chép; quá cỡ thì bỏ cả dòng, không cắt nửa trích dẫn."
+    pass: "All citations use the format, quotes equal sentence text, sizes are under the caps."
+    fail: "A citation is malformed, a quote was edited or cut, or a cap is exceeded."
+    level: fail
+    enforced_by: presentation.cite
+    audit: [N3b, CONTRACTS-8.4]
+    params: {paper_note_kib: 120, node_note_kib: 60}
+  - id: VN-08
+    stage: VN
+    rule: "Machine-written text in notes uses one language per kind of text (English headings and canonical text), with no mixed Vietnamese-English machine phrases and no dashboard link to 127.0.0.1 inside note text."
+    vi: "Phần máy viết dùng một ngôn ngữ nhất quán; không trộn Việt-Anh và không chèn link 127.0.0.1 trong thân note."
+    pass: "Mixed-language machine phrases = 0 and local dashboard links in body = 0."
+    fail: "74% of notes mix languages and 79% carry a 127.0.0.1 link today."
+    level: warn
+    enforced_by: conform_vault.one_language_and_no_local_links
+    audit: [D-notes]
+  - id: VN-09
+    stage: VN
+    rule: "The graph colours knowledge edges and navigation edges differently and the default filter hides navigation, stubs and review items."
+    vi: "Graph Obsidian tách cạnh tri thức khỏi cạnh điều hướng."
+    pass: "graph.json groups follow CONTRACTS 8.5 and navigation edges are filtered."
+    fail: "Navigation edges drown knowledge edges."
+    level: warn
+    enforced_by: conform_vault.graph_settings
+    audit: [D-graph, P3-12]
+  - id: VN-10
+    stage: VN
+    rule: "A retired machine note moves to knowledge_store/removed/ and is never deleted; one with human text stays with a warning block."
+    vi: "Note máy bị gỡ thì chuyển vào removed/, không xóa; note có chữ của người thì giữ lại kèm cảnh báo."
+    pass: "Retired notes are found in removed/ and human text survives."
+    fail: "A retired note is deleted or human text is lost."
+    level: fail
+    enforced_by: concept_notes._retire_orphans
+    audit: [CONTRACTS-8.1]
+
+  # ---------------------------------------------------------------- RT
+  - id: RT-01
+    stage: RT
+    rule: "Search combines exact terms, full text, metadata filters, synonym and entity expansion and optional semantic search; semantic similarity alone is never evidence."
+    vi: "Tìm kiếm kết hợp từ khóa, toàn văn, bộ lọc, từ đồng nghĩa và (tùy chọn) nghĩa; độ giống về nghĩa không phải là bằng chứng."
+    pass: "Every hit is a stored sentence or unit with a source; the retrieval mode is reported."
+    fail: "A hit without a stored source is presented as evidence."
+    level: fail
+    enforced_by: find.search
+    audit: [AGENTS-search]
+  - id: RT-02
+    stage: RT
+    rule: "In OR mode results rank first by the number of keyword groups matched, then by bm25; the match is filtered before the candidate cap, and no multiplier is applied twice."
+    vi: "Khi tìm kiểu OR, xếp theo số nhóm từ khóa khớp trước rồi mới tới bm25."
+    pass: "An item matching all groups ranks above an item matching fewer groups."
+    fail: "A sentence matching one weak group outranks one matching all (a paper matching only one weak group above a paper that states the topic directly)."
+    level: fail
+    enforced_by: conform_answer.probe_or_ranking
+    audit: [S16-05]
+  - id: RT-03
+    stage: RT
+    rule: "Word variants (vitrification, vitrified, vitrify) match each other, and affect, impact, influence, change are stop words."
+    vi: "Các dạng của một từ (vitrification/vitrified/vitrify) khớp nhau; affect, impact, influence, change là từ dừng."
+    pass: "Recall on the variant fixture reaches the target."
+    fail: "Recall stays at 0.68."
+    level: warn
+    enforced_by: conform_answer.probe_word_variants
+    audit: [N06]
+    params: {variant_recall_target: 0.9}
+  - id: RT-04
+    stage: RT
+    rule: "A Vietnamese query is expanded to English keywords or flagged needs_translation; it is never searched as if it were English."
+    vi: "Câu hỏi tiếng Việt phải được đổi sang từ khóa tiếng Anh hoặc báo cần dịch."
+    pass: "Vietnamese queries return an English expansion or the flag."
+    fail: "A Vietnamese query returns 0 rows silently."
+    level: warn
+    enforced_by: find.looks_vietnamese
+    audit: [S16-06, P2-9]
+  - id: RT-05
+    stage: RT
+    rule: "When keyword-group coverage of the best items is below the threshold, the result carries a 'not found in the current vault' flag and states how many groups the best item matched."
+    vi: "Khi độ phủ từ khóa thấp hơn ngưỡng, kết quả phải báo 'không tìm thấy trong vault hiện tại' kèm số nhóm khớp tốt nhất."
+    pass: "A query about something absent (V5, M3 gold questions) returns the flag."
+    fail: "An absent topic returns 12 loose items with no warning."
+    level: fail
+    enforced_by: conform_answer.probe_not_found
+    audit: [S16-06, P2-9, N16]
+    params: {min_group_coverage: 0.75}
+  - id: RT-06
+    stage: RT
+    rule: "Default scope is the current vault; other vaults are searched only when requested; an unknown vault is an error."
+    vi: "Mặc định chỉ tìm trong vault hiện tại; vault lạ báo lỗi."
+    pass: "Hits belong to the requested vault; an unknown vault raises."
+    fail: "A hit from another vault appears unrequested."
+    level: fail
+    enforced_by: find.search
+    audit: [AGENTS-search, N14]
+  - id: RT-07
+    stage: RT
+    rule: "Answer collection gives each query a fair share of the item slots and keeps the sentences that match the query, not the first three of a unit."
+    vi: "Khi gom bằng chứng, mỗi truy vấn được chia chỗ đều; giữ câu khớp truy vấn thay vì 3 câu đầu của đơn vị."
+    pass: "Top items of every query appear in the item list."
+    fail: "A rank 1-2 hit of a query is dropped for rank 1-5 hits of another."
+    level: fail
+    enforced_by: answer.collect
+    audit: [S16-05, N05]
+  - id: RT-08
+    stage: RT
+    rule: "References, front matter, acknowledgements, funding, contributions, conflicts, data availability and notes printed after the references (section notes) are excluded from search, and pagination is stable."
+    vi: "Tài liệu tham khảo, phần đầu trang, lời cảm ơn, ghi chú in sau tài liệu tham khảo (notes)... không nằm trong kết quả tìm; phân trang ổn định."
+    pass: "No hit from those sections; repeated paging returns no duplicate or skipped rows."
+    fail: "A funding sentence is returned, or paging shifts."
+    level: warn
+    enforced_by: find.search
+    audit: [N07, N14g]
+  - id: RT-09
+    stage: RT
+    rule: "For an important scientific query the surrounding sentences, paragraph and section are re-read before answering (get_context), widening step by step."
+    vi: "Với câu hỏi khoa học quan trọng, phải đọc lại ngữ cảnh xung quanh (câu, đoạn, mục) trước khi trả lời."
+    pass: "The answer protocol step 1 is followed and context items exist for the cited sentences."
+    fail: "An answer rests on an isolated sentence without a context check."
+    level: warn
+    enforced_by: find.context
+    audit: [AGENTS-search, protocol-1]
+  - id: RT-10
+    stage: RT
+    rule: "Retrieved evidence keeps its paper identifier, title, DOI and/or PMID, section, page, original passage and a reference to the surrounding context."
+    vi: "Bằng chứng truy xuất luôn kèm mã bài, tiêu đề, DOI/PMID, mục, trang, đoạn gốc và cách tìm ngữ cảnh xung quanh."
+    pass: "Every hit and every answer item carries paper_id, title, doi or pmid (when the paper has one), section, page, verbatim text and sentence_ids."
+    fail: "A hit lacks one of those fields."
+    level: fail
+    enforced_by: conform_answer.hit_fields
+    audit: [AGENTS-citation]
+  - id: RT-11
+    stage: RT
+    rule: "Overlap search is always labelled lexical overlap (word 5-gram containment) and is never presented as a plagiarism verdict."
+    vi: "Tìm trùng chữ luôn gọi là 'trùng từ ngữ', không bao giờ kết luận đạo văn."
+    pass: "Every overlap hit and the result carry the label 'lexical overlap'."
+    fail: "An overlap result is worded as plagiarism or has no label."
+    level: warn
+    enforced_by: overlap.find_overlaps
+    audit: [CONTRACTS-4.4]
+  - id: RT-12
+    stage: RT
+    rule: "Non-PDF sources (own data, human notes) are returned as source_hits labelled non-published evidence and are never mixed with paper hits or answers."
+    vi: "Nguồn không phải bài báo (dữ liệu riêng, ghi chú của người) trả riêng, gắn nhãn chưa công bố, không trộn với bài báo."
+    pass: "source_hits is a separate list and each row carries evidence_class own_data or human_note."
+    fail: "A non-PDF source row appears among paper hits or in an answer as published evidence."
+    level: fail
+    enforced_by: find.search
+    audit: [CONTRACTS-6]
+
+  # ---------------------------------------------------------------- AN
+  - id: AN-01
+    stage: AN
+    rule: "A1: every answer sentence cites at least one existing item."
+    vi: "Mỗi câu trả lời dẫn ít nhất một mục bằng chứng có thật."
+    pass: "Each sentence has a valid [#n] or sentence_ids."
+    fail: "A sentence has no existing citation (struck)."
+    level: fail
+    enforced_by: answer.check_sentence
+    audit: [A1]
+  - id: AN-02
+    stage: AN
+    rule: "A2: every number in an answer occurs in the cited verbatim text or is a cited year or reference number, and the number comes from an item that holds the identifier it describes."
+    vi: "Con số trong câu trả lời phải có trong nguyên văn mục được dẫn, và mục đó phải nói về đúng đối tượng."
+    pass: "Each number occurs in a cited item that names the described entity; adding more citations cannot rescue a number."
+    fail: "A number is absent, or is borrowed from an item about another entity."
+    level: fail
+    enforced_by: answer.check_sentence
+    audit: [A2, N01, S16-09]
+  - id: AN-03
+    stage: AN
+    rule: "A3: a definitive or causal sentence over hedged items is struck; Vietnamese causal verbs (gây ra, khiến, gây nên, làm cho, chứng tỏ, chứng minh, dẫn đến) are included and NFD spelling does not evade the check."
+    vi: "Câu khẳng định/nhân quả trên nguồn còn dè dặt bị gạch, kể cả các động từ tiếng Việt và chữ viết dạng NFD."
+    pass: "Causal wording over hedged items is struck in NFC and NFD."
+    fail: "A causal sentence passes because of spelling form or a missing verb."
+    level: fail
+    enforced_by: answer.check_sentence
+    audit: [A3, N03]
+  - id: AN-04
+    stage: AN
+    rule: "A4: a sentence whose cited items are all second-hand (re-cited) needs attribution; an item is second-hand only when the citation sits in the sentence actually used, and 'Author Year proposed/suggested/hypothesised' counts as attribution."
+    vi: "Nguồn thứ cấp phải ghi rõ tác giả; chỉ tính thứ cấp khi trích dẫn nằm đúng trong câu được dùng."
+    pass: "Attributed sentences pass; own-hypothesis sentences of the cited authors pass."
+    fail: "A correct 'Author Year proposed a hypothesis' sentence is struck (S16-03) or a bare 'theo' passes."
+    level: fail
+    enforced_by: answer.check_sentence
+    audit: [A4, S16-03]
+  - id: AN-05
+    stage: AN
+    rule: "A5: a sentence supported only by review papers must say so (warning)."
+    vi: "Câu chỉ dựa vào bài tổng quan phải nói rõ điều đó."
+    pass: "Review-only support is named."
+    fail: "Review-only support is presented as primary evidence."
+    level: warn
+    enforced_by: answer.check_sentence
+    audit: [A5]
+  - id: AN-06
+    stage: AN
+    rule: "A6: tăng/giảm/không đổi in an answer agrees with the direction of every cited unit that has one."
+    vi: "Hướng tăng/giảm trong câu trả lời khớp với hướng của đơn vị được dẫn."
+    pass: "Direction words match."
+    fail: "A direction contradicts a cited unit (struck)."
+    level: fail
+    enforced_by: answer.check_sentence
+    audit: [A6]
+  - id: AN-07
+    stage: AN
+    rule: "A7: uncertainty in the cited source sentence that matches the claim must stay; hedge is read on that sentence, not on a whole unit, and non-significance wording is recognised in Vietnamese."
+    vi: "Mức dè dặt của câu nguồn tương ứng phải được giữ; xét theo câu nguồn khớp, nhận cả cách nói 'không có ý nghĩa thống kê'."
+    pass: "A correct statement about a different measure of the same unit is not struck."
+    fail: "H4K12ac p<0.05 is struck because H3K9me3 in the same unit was not significant (S16-02, S16-08)."
+    level: fail
+    enforced_by: answer.check_sentence
+    audit: [A7, S16-02, S16-08]
+  - id: AN-08
+    stage: AN
+    rule: "A8: reasoning basis may cite only notes of the ticket allowlist."
+    vi: "Phần suy luận chỉ được dựa vào note có trong danh sách cho phép."
+    pass: "All basis notes are in note_refs."
+    fail: "An unknown note path is accepted (test locks this today)."
+    level: fail
+    enforced_by: answer.check_reasoning
+    audit: [A8, N10]
+  - id: AN-09
+    stage: AN
+    rule: "A9: a Part 2 sentence does not open with a bare verdict (Có, Không, Yes, No)."
+    vi: "Câu mở đầu không phải là 'Có/Không' trần."
+    pass: "No bare verdict opener."
+    fail: "A bare verdict opens a sentence (warning)."
+    level: warn
+    enforced_by: answer.check_sentence
+    audit: [A9]
+  - id: AN-10
+    stage: AN
+    rule: "A10 subject and condition: every identifier in an answer sentence (histone mark, species, agent, condition) must occur in the item it cites, split slash forms like H3K4me2/3 before checking."
+    vi: "Mỗi định danh trong câu trả lời (mốc histone, loài, tác nhân, điều kiện) phải có trong mục được dẫn."
+    pass: "An item about another treatment (sip150) cannot support a vitrification sentence; H3K4me2/3 is read as me2 and me3."
+    fail: "A sentence about vitrification passes on an item about sip150 (S16-01), or H3K4me2/3 trips A2 (S16-09)."
+    level: fail
+    enforced_by: conform_answer.probe_a10_subject
+    audit: [S16-01, S16-09]
+  - id: AN-11
+    stage: AN
+    rule: "A sentence that states the limit of the evidence runs with limits=True (A3, A6, A7 relaxed) but may not contain an affirming result verb."
+    vi: "Câu nêu giới hạn của bằng chứng được xử lý riêng nhưng không được chứa động từ khẳng định kết quả."
+    pass: "'Only one mouse study, not generalisable' passes; 'proves' fails."
+    fail: "A limits sentence is struck by A7, or an affirming verb slips in."
+    level: fail
+    enforced_by: conform_answer.probe_limits_sentence
+    audit: [S16-04]
+  - id: AN-12
+    stage: AN
+    rule: "Item numbers are written [#n] so they never clash with literature references like [40-42]; the checker rejects bool, float and Infinity values."
+    vi: "Số thứ tự mục viết [#n] để không lẫn với trích dẫn tài liệu; từ chối giá trị bool, float, vô cực."
+    pass: "[#3] is an item, [40-42] is a literature reference, and bad values are rejected, not crashed."
+    fail: "[2] is read as item 2 inside a reference list, or Infinity kills ask_check."
+    level: fail
+    enforced_by: conform_answer.probe_item_numbers
+    audit: [N02, N14d]
+  - id: AN-13
+    stage: AN
+    rule: "ask_check checks the same items that ask_prepare gave (items_digest), and returns the markdown with the reason for each struck sentence; item order cannot change between the two calls."
+    vi: "ask_check kiểm đúng các mục mà ask_prepare đã đưa, kèm lý do gạch từng câu."
+    pass: "The digest of prepare equals the digest of check, and struck sentences carry reasons."
+    fail: "ask_check retrieves again and the [n] numbers change."
+    level: fail
+    enforced_by: conform_answer.probe_items_digest
+    audit: [N12, N13]
+  - id: AN-14
+    stage: AN
+    rule: "Part 1 quotes and citations are copied by code; an AI never types a quote, and missing author, year or page reads 'không rõ'."
+    vi: "Trích dẫn nguyên văn do code chép; thiếu tác giả/năm/trang thì ghi 'không rõ'."
+    pass: "Every quote equals the stored sentence text."
+    fail: "A typed or altered quote appears."
+    level: fail
+    enforced_by: answer.code_evidence
+    audit: [AGENTS-rule9, CONTRACTS-4.2]
+  - id: AN-15
+    stage: AN
+    rule: "Model memory is never presented as evidence: every Part 2 and Part 3 sentence carries exactly one kind of basis, item citations [#n] (quotes copied by code), an inference 'suy luận từ ...' over items or server-ticket note references (AN-08) that keeps the strength of the cited sentences, or the label 'kiến thức của AI (không phải bằng chứng trong thư viện)'; general knowledge appears only in Part 3 ([REASONING]); Part 1 (code-printed quotes) and Part 4 (missing coverage, limits under AN-11, scope note) keep their own rules; the server instructions and the answer protocol use this one label, and 'not found in the current vault' is never worded as 'not studied in the literature'."
+    vi: "Mỗi câu ở phần trả lời và phần suy luận có đúng một loại cơ sở: trích dẫn [#n], 'suy luận từ' các mục hoặc note của server, hoặc nhãn 'kiến thức của AI (không phải bằng chứng trong thư viện)'; kiến thức của AI chỉ ở phần suy luận; 'không thấy trong vault' không có nghĩa là chưa ai nghiên cứu."
+    pass: "Every Part 2 sentence cites an item; every Part 3 sentence has a basis of items or allowed ticket notes (rendered 'suy luận từ') or basis 'ai_knowledge' (rendered with the AI label); Part 1 and Part 4 are unchanged; the server instructions and config/answer_protocol.md show the same label; the scope note is present."
+    fail: "A Part 3 sentence has no basis (today it passes when it holds no number), AI knowledge appears in Part 1-2, the two texts use different labels, or absence is claimed globally."
+    level: fail
+    enforced_by: answer.check_parts
+    audit: [AGENTS-core, protocol-3, client-app-2026-10-22-Q3]
+  - id: AN-16
+    stage: AN
+    rule: "Contradicting findings are shown with both sides and their own citations; the answer never picks a winner silently."
+    vi: "Kết quả mâu thuẫn phải nêu cả hai phía kèm trích dẫn; không âm thầm chọn một bên."
+    pass: "Both sides appear with citations."
+    fail: "Only one side is reported."
+    level: warn
+    enforced_by: conform_answer.probe_both_sides
+    audit: [protocol-3]
+  - id: AN-17
+    stage: AN
+    rule: "Saved discussions follow the answer protocol (lookup, related notes, brainstorm, continue), are saved only on 'lưu', are never evidence, and a knowledge gap is saved only when the researcher agrees, with three labelled parts (evidence, AI knowledge, researcher's judgement); a settled point is saved as kind decision only when the researcher says 'chốt', with the researcher's own words, the date and the item citations shown at that time, and a later decision on the same point is a new note that links the earlier one."
+    vi: "Thảo luận chỉ lưu khi nhà nghiên cứu nói 'lưu', không phải bằng chứng; knowledge gap chỉ lưu khi họ đồng ý, gồm 3 phần có nhãn; ý chốt chỉ lưu khi họ nói 'chốt', ghi đúng lời họ, ngày và các trích dẫn lúc đó."
+    pass: "save_discussion notes have evidence: false and kind discussion, knowledge_gap or decision; a decision note holds the researcher's words, the date and at least one item citation or the line 'không có bằng chứng trong kho lúc chốt'."
+    fail: "A discussion or decision is used as evidence in search, a gap is saved without agreement, a decision is saved without 'chốt', or a decision note overwrites an earlier one."
+    level: fail
+    enforced_by: discussions.save
+    audit: [protocol, AGENTS-gaps, client-app-2026-10-22-Q7]
+  - id: AN-18
+    stage: AN
+    rule: "Every important claim in an answer stays traceable along AI answer, claim, retrieved passage, section, page, paper, original source."
+    vi: "Mỗi nhận định quan trọng truy ngược được: câu trả lời, nhận định, đoạn trích, mục, trang, bài, nguồn gốc."
+    pass: "For each cited item the chain item, sentence_ids, section, page, paper_id and source file status can be resolved."
+    fail: "A cited item cannot be resolved to its page and paper, or the original-source status is hidden."
+    level: fail
+    enforced_by: conform_answer.traceable_chain
+    audit: [AGENTS-hierarchy]
+  - id: AN-19
+    stage: AN
+    rule: "An answer does not follow the asker's view without evidence: what the vault supports is stated as supported, what it does not support is stated as not found or contradicted; a disagreement with the researcher cites items (quotes copied by code) and shows both sides when a conflict exists; a point the researcher settled (a decision note) is not argued again, a later answer on it shows 'bằng chứng – ý chốt' side by side, and evidence that entered the vault after the decision date is reported once, without repeating the earlier evidence."
+    vi: "AI không chiều theo ý người hỏi khi không có bằng chứng; phản bác phải kèm trích dẫn và nêu cả hai phía nếu có mâu thuẫn; ý đã chốt thì không phản bác lại, khi hỏi lại thì nêu 'bằng chứng – ý chốt'; bằng chứng mới sau ngày chốt chỉ báo một lần."
+    pass: "Trap questions (the asker asserts what the vault does not support) get 'not found' or the contradicting items with quotes; an answer on a settled point shows the decision note labelled 'ý chốt của bạn (ngày)' next to its evidence; newer evidence is flagged in one answer only."
+    fail: "The answer agrees with an unsupported assertion, disagrees without a quote, argues a settled point again, or flags the same newer evidence twice."
+    level: warn
+    enforced_by: G3
+    audit: [AGENTS-core, protocol-3, client-app-2026-10-22-important, client-app-2026-10-22-Q7]
+  - id: AN-20
+    stage: AN
+    rule: "Brainstorm memory is context, never evidence: a researcher profile shared by the project and topic notes kept per vault (files under the project's runtime/brainstorm folder only, never an AI app's own memory, user-level files or another vault) are read once per chat for the asked vault, shown only as 'ý của bạn (đã nhớ, <date>)' or 'ghi chú tìm kiếm của AI (<date>)' and never cited in Parts 1-2; remember appends one dated line marked with who wrote it (facts about the researcher only from the researcher's own words), never edits an earlier line and refuses a file at its line cap; a remembered 'not found' is searched again before it is used; memory is never sent to a client allowed only retrieval output (Q6, Hermes)."
+    vi: "Trí nhớ brainstorm chỉ là ngữ cảnh, không phải bằng chứng: hồ sơ của bạn (chung cho dự án) và ghi chú chủ đề (riêng từng kho) chỉ nằm trong runtime/brainstorm của dự án; khi hiện ra mang nhãn 'ý của bạn (đã nhớ, ngày)' hoặc 'ghi chú tìm kiếm của AI (ngày)', không vào Phần 1-2; chỉ ghi thêm dòng có ngày và người ghi, không sửa dòng cũ, đầy thì từ chối; 'không tìm thấy' đã nhớ phải tìm lại trước khi dùng; không gửi trí nhớ cho Hermes."
+    pass: "remember appends a dated line with its writer, refuses a full file, a vault outside the research vaults or a path outside runtime/brainstorm; get_answer_rules returns the profile and only the asked vault's topics, and nothing when the server runs without memory."
+    fail: "Memory is cited as evidence, an earlier line is changed, one vault reads another vault's topics, memory is written outside runtime/brainstorm or into an app's memory, or a retrieval-only client receives it."
+    level: fail
+    enforced_by: discussions.remember
+    audit: [AGENTS-1, AGENTS-5, brainstorm-2026-11-02]
+    params: {profile_max_lines: 60, topic_max_lines: 120, max_line_chars: 300}
+
+  # ---------------------------------------------------------------- NW
+  - id: NW-01
+    stage: NW
+    rule: "A neural_prepare payload stays within the size budget and the estimated prompt within the token budget."
+    vi: "Kết quả neural_prepare không vượt giới hạn dung lượng và token."
+    pass: "payload bytes <= max and prompt tokens <= budget on the gold questions."
+    fail: "Payload is 0.7-1.1 MB with 10-15k prompt tokens today (scripts/benchmark_research.py measures it but is not shipped in releases)."
+    level: fail
+    enforced_by: conform_network.payload_budget
+    audit: [D-payload, P3-11]
+    params: {max_payload_kb: 150, token_budget_fast: 4000, token_budget_deep: 8000, context_share: 0.25}
+  - id: NW-02
+    stage: NW
+    rule: "Items are ranked by relevance to the question (matched sentences first), not by unit order, and a field is not repeated (items versus source_resolution, media versus figures)."
+    vi: "Xếp theo độ liên quan đến câu hỏi; không lặp trường dữ liệu."
+    pass: "First must-sentence rank is within the target and no duplicated field exists."
+    fail: "The first must-sentence is at rank 9.5 (median) and fields are duplicated."
+    level: fail
+    enforced_by: conform_network.ranking_and_duplicates
+    audit: [S16-07, N08, N09, N11]
+    params: {max_first_must_rank: 3, min_idea_coverage: 0.77}
+  - id: NW-03
+    stage: NW
+    rule: "Unit labels (result, hypothesis, cited_statement, interpretation) are kept in neural items so a tested result is told from a proposal."
+    vi: "Giữ nhãn loại đơn vị (result, hypothesis...) để phân biệt 'đã thử' với 'giả thuyết'."
+    pass: "Each item shows its unit_type."
+    fail: "All items are labelled text."
+    level: fail
+    enforced_by: conform_network.probe_unit_labels
+    audit: [D-neural]
+  - id: NW-04
+    stage: NW
+    rule: "Expansion by hops follows knowledge edges only and skips hubs and index/MOC notes, so a second hop adds something."
+    vi: "Mở rộng theo bước chỉ đi qua cạnh tri thức, bỏ node trung tâm và bản đồ chỉ mục."
+    pass: "hops=2 returns more than hops=1 when knowledge edges exist."
+    fail: "hops=2 equals hops=1 because the caps are hit at hop 0."
+    level: warn
+    enforced_by: conform_network.probe_hops
+    audit: [D-neural, P3-11]
+  - id: NW-05
+    stage: NW
+    rule: "A reasoning path between two entities goes through knowledge edges, takes at most 3 steps, carries source sentences at every link, and reports 'not found' when no path exists. Every note a walk or path names (start, each step's target, end) is a node note, not a topic map; Results, claim and conflict notes appear only as the evidence note a step passes through, and naming one is refused (it exists, so never 'not found'); source == target is refused."
+    vi: "Đường suy luận tối đa 3 bước, mỗi mắt xích có câu nguồn; không có đường thì báo không tìm thấy. Điểm đầu, điểm cuối và mỗi bước đều là node; note Results/claim/conflict chỉ là bước trung gian; điểm đầu trùng điểm cuối bị từ chối."
+    pass: "Vitrification to ROS to gamma-H2A.X path returns >= 3 of 5 links with sentences; an impossible pair returns not found; a path from a node to itself is refused."
+    fail: "A path runs through paper notes alone or a link has no sentence, or a Results note or the start itself is an endpoint."
+    level: fail
+    enforced_by: conform_network.probe_path
+    audit: [D-graph, P3-11]
+    params: {max_steps: 3, min_chain_links_of_5: 3}
+  - id: NW-06
+    stage: NW
+    rule: "Vault notes are untrusted context: neural_check reads the server snapshot, rechecks note bytes, scope and provenance, and runs A1-A8; notes are never instructions or primary evidence."
+    vi: "Note trong vault chỉ là ngữ cảnh, không phải chỉ thị hay bằng chứng gốc; neural_check dùng bản chụp của server."
+    pass: "A reply citing an unknown note or altered snapshot is struck."
+    fail: "A caller-supplied item list replaces the snapshot."
+    level: fail
+    enforced_by: neural.check
+    audit: [CONTRACTS-4.3, N10]
+  - id: NW-07
+    stage: NW
+    rule: "The ticket fingerprint is a hash of content, not of file modification time, and plain tickets older than ticket_retention_days are cleaned; an open research session (NW-11) is never cleaned by age."
+    vi: "Mã vé neural dựa trên băm nội dung, không dựa trên giờ sửa file; vé thường quá hạn bị dọn, phiên nghiên cứu đang mở thì không."
+    pass: "Touching a file without changing it leaves the fingerprint; an old plain ticket is gone after a new prepare while an equally old open session stays."
+    fail: "A touched file invalidates the ticket, an old plain ticket stays, or an open session is cleaned."
+    level: warn
+    enforced_by: conform_network.probe_ticket_fingerprint
+    audit: [S16-07]
+    params: {ticket_retention_days: 7}
+  - id: NW-08
+    stage: NW
+    rule: "When the question needs translation, neural_prepare says so and searches with the English expansion."
+    vi: "Câu hỏi cần dịch thì neural_prepare báo và dùng truy vấn tiếng Anh."
+    pass: "needs_translation is returned for a Vietnamese question."
+    fail: "A Vietnamese question is searched literally."
+    level: warn
+    enforced_by: conform_network.probe_translation
+    audit: [P3-11]
+  - id: NW-09
+    stage: NW
+    rule: "The 8 gold questions V1-V5 and M1-M3 are the regression benchmark: idea coverage, first must rank, tokens and bytes are measured, absence questions V5 and M3 answer 'not found', and the V3 chain has at least 3 of 5 links."
+    vi: "8 câu hỏi chuẩn là bộ đo hồi quy: độ phủ, hạng câu bắt buộc, token, dung lượng; câu V5, M3 phải trả 'không tìm thấy'."
+    pass: "benchmark_research --gold meets the thresholds of NW-01, NW-02, NW-05."
+    fail: "A threshold is missed or an absence question returns confident evidence."
+    level: fail
+    enforced_by: conform_network.gold_benchmark
+    audit: [D-gold]
+  - id: NW-10
+    stage: NW
+    rule: "A research session expands in bounded rounds: each round returns, for every WH slot the question asks (all brainstorm_slots when the researcher says 'brainstorm'), the item numbers that fill it and the missing slots, marked as a code heuristic from unit type, protocol field and node type, plus a stop reason: every asked slot has an item, no new matching item in no_gain_rounds rounds, or max_rounds or the token budget is reached; a missing slot is reported as missing, never filled from model memory, and the absence questions V5 and M3 still answer not found."
+    vi: "Tìm theo từng vòng có giới hạn; mỗi vòng báo câu hỏi WH nào đã có mục trích, WH nào thiếu (đây là cách đoán bằng code) và lý do dừng; WH thiếu thì nói thiếu, không lấy kiến thức của AI để lấp."
+    pass: "A test session stops with each stop reason; coverage carries heuristic: true; a missing slot appears in Part 4; V5 and M3 return not found."
+    fail: "Expansion runs without a bound, a slot is reported filled without an item, or a missing slot is answered from model memory."
+    level: fail
+    enforced_by: G3
+    audit: [client-app-2026-10-22-Y2, client-app-2026-10-22-Q2, RT-09]
+    params:
+      max_rounds: 4
+      no_gain_rounds: 2
+      session_token_budget: 16000
+      brainstorm_slots: [what, why, which, when, who, where, how]
+      question_words: config/wh_words.yaml
+      slot_sources:
+        what: [result, conclusion]
+        why: [interpretation, hypothesis, background]
+        which: [protocol.comparator, groups]
+        when: [protocol.timing, protocol.duration, profile.stage]
+        who: [node.species, node.cell_type, groups]
+        where: [profile.origin, profile.setting]
+        how: [method_detail, protocol.technique, protocol.concentration, protocol.dose, protocol.equipment, protocol.duration]
+  - id: NW-11
+    stage: NW
+    rule: "A research session keeps the items of all its rounds in the server ticket until the researcher closes it or starts a new topic (said in chat; the client then closes the session or opens a new one); it never expires by time and open sessions are listed so a later chat can resume one; ask_check and neural_check of the session check every sentence against the union of those items, each round is fingerprinted by content, a round whose items changed is refused, and only closed sessions are cleaned (NW-07 cleaning skips open sessions); resuming or listing a session returns a compact index (item number, paper, page, one line) within token_budget_fast of NW-01, and full item text is fetched by number on demand, so a long session never has to be reloaded into the client's context; a round (and ask_prepare) may return the same compact index instead of full items, and a Part 2 sentence then cites only items whose full text was fetched by number (the session records them; the check warns on a cited item never fetched)."
+    vi: "Phiên nghiên cứu giữ các mục của mọi vòng trên server cho tới khi nhà nghiên cứu đóng phiên hoặc bắt đầu chủ đề mới, không tự đóng theo thời gian; cuộc chat sau có thể mở lại phiên đang mở; bước kiểm câu trả lời so với tất cả các mục đó; vòng nào bị đổi thì bị từ chối; chỉ phiên đã đóng mới được dọn; một vòng có thể chỉ trả mục lục gọn, khi đó Phần 2 chỉ trích những mục đã lấy toàn văn theo số."
+    pass: "A sentence citing a round-1 item checks in round 3; an altered round is refused; an open session survives any time span and a server restart and is listed for resuming; a closed session is removed; a new topic opens a new session; resuming a 500-item session returns at most token_budget_fast tokens."
+    fail: "The check retrieves again, numbers [#n] change between rounds, a caller-supplied list replaces the session, an open session is cleaned or expires by time, or a closed session stays."
+    level: fail
+    enforced_by: G3
+    audit: [client-app-2026-10-22-Y4, client-app-2026-10-22-Q4, client-app-2026-10-22-NW11-change, AN-13, NW-06, NW-07]
+  - id: NW-12
+    stage: NW
+    rule: "Every retrieved item and every answer citation carries its vault-relative note path and an obsidian:// link of the current vault; a figure or PDF page is returned as an MCP image (at most max_image_mb) with caption, page and links; a number a client reads from an image is labelled as read from the image and is never evidence unless it occurs in the caption, a table row or a stored figure reading."
+    vi: "Mỗi mục tìm được và mỗi trích dẫn có link mở thẳng note trong Obsidian; hình và trang PDF trả về kèm chú thích, trang và link; số AI tự đọc từ hình phải ghi rõ và không phải bằng chứng."
+    pass: "neural_prepare and ask_prepare items carry note_path and obsidian_url; get_figure and get_pdf_page return an image block with caption, page and links; the answer protocol labels pixel-read numbers."
+    fail: "An item has no link, an image is returned without its caption or page, or a pixel-read number is cited as evidence."
+    level: fail
+    enforced_by: G3
+    audit: [client-app-2026-10-22-Y5, client-app-2026-10-22-Q5, P13-P14]
+    params: {max_image_mb: 4}
+
+  # ---------------------------------------------------------------- RQ
+  - id: RQ-01
+    stage: RQ
+    rule: "The review queue Cần duyệt.md has only four groups: (1) wrong knowledge in the source paper, (2) AI-made error whose fix is uncertain, (3) orphan papers that cannot be re-linked, (4) claims without a traceable source that machine checking could not decide."
+    vi: "Hàng chờ chỉ có 4 nhóm: sai kiến thức bài gốc; sai do AI chưa chắc cách sửa; bài mồ côi chưa nối lại được; nhận định không có nguồn mà máy không quyết được."
+    pass: "Every queue item belongs to one group."
+    fail: "An item of another kind is queued (review_digest.write still queues node cards, conflicts and open hypotheses today)."
+    level: fail
+    enforced_by: conform_vault.queue_has_four_groups
+    audit: [PLAN-RQ]
+  - id: RQ-02
+    stage: RQ
+    rule: "These never enter the queue: conflicts (they live in Conflicting findings with #conflict), AI cards, open hypotheses, wrong crops (re-cut by the secretary), unclear sentences (re-read wider and re-sorted by the secretary), node labels, types, merges, removals and machine-added concepts (decided by the machine under ND-10 and listed), and decisions to delete or push (asked in chat)."
+    vi: "Không đưa vào hàng chờ: mâu thuẫn, thẻ AI, giả thuyết mở, ảnh cắt sai, câu chưa rõ nghĩa, nhãn/kiểu node, gộp/bỏ node và khái niệm máy tự thêm (máy tự quyết và liệt kê), quyết định xóa hoặc đẩy GitHub."
+    pass: "None of those kinds is in the queue."
+    fail: "Such an item is queued (review_digest.write lists node cards, open conflicts, open hypotheses and wrong crops today)."
+    level: fail
+    enforced_by: conform_vault.queue_excludes_other_kinds
+    audit: [PLAN-RQ, STATUS-15]
+  - id: RQ-03
+    stage: RQ
+    rule: "Each queue item is self-contained: the source sentence copied by code, a link to the note and the PDF page, what the machine found, a proposal and three tick boxes (agree, keep as is, other)."
+    vi: "Mỗi mục tự đủ: câu gốc do code chép, link, điều máy phát hiện, đề xuất và 3 ô chọn."
+    pass: "Every item has quote, link, finding, proposal and three boxes."
+    fail: "An item lacks one of them."
+    level: fail
+    enforced_by: conform_vault.queue_items_are_self_contained
+    audit: [PLAN-RQ]
+  - id: RQ-04
+    stage: RQ
+    rule: "A claim is machine-checked against its sources first; invented text is removed to removed/ automatically and only what the machine cannot decide enters group 4."
+    vi: "Máy kiểm nguồn trước: nội dung bịa tự bị loại vào removed/; chỉ phần máy không quyết được mới vào hàng chờ."
+    pass: "Queue group 4 holds only undecidable claims."
+    fail: "A fabricated claim waits for a human."
+    level: fail
+    enforced_by: G3
+    audit: [PLAN-RQ]
+  - id: RQ-05
+    stage: RQ
+    rule: "Applying a decision goes through the validators, is logged in review_decisions.jsonl (reversible), and never edits the PDF; an error in the source paper only gets a source_issue flag and a visible warning."
+    vi: "Áp dụng quyết định phải qua bộ kiểm, ghi nhật ký khôi phục được; không sửa PDF — lỗi của bài gốc chỉ gắn cờ source_issue và hiện cảnh báo."
+    pass: "Each applied decision has a log row and the PDF hash is unchanged."
+    fail: "A decision is applied without a log or the source is modified."
+    level: fail
+    enforced_by: conform_vault.decisions_are_logged
+    audit: [PLAN-RQ]
+  - id: RQ-06
+    stage: RQ
+    rule: "The queue file sits at the vault root, is the first link of Home and is pinned, with three instruction lines at its top."
+    vi: "File hàng chờ nằm ở gốc vault, là link đầu tiên ở Home, được ghim, đầu trang có 3 dòng hướng dẫn."
+    pass: "The file exists at the root with the Home link first."
+    fail: "The researcher cannot find the queue (as on 13/10)."
+    level: warn
+    enforced_by: conform_vault.queue_is_easy_to_find
+    audit: [STATUS-15]
+  - id: RQ-07
+    stage: RQ
+    rule: "A paper is flagged only when no source-backed connection to the vault topic exists (computed POTENTIAL_BRIDGE); a stored human classification is never overwritten and no paper is purged."
+    vi: "Chỉ gắn cờ bài khi không có kết nối nào với chủ đề vault; phân loại của người không bị ghi đè; không loại bỏ bài."
+    pass: "Flags are topic_relevance only and human classes are unchanged."
+    fail: "A human classification is overwritten or a paper is purged."
+    level: fail
+    enforced_by: review_policy.refresh
+    audit: [CONTRACTS-9, AGENTS-classification]
+
+  # ---------------------------------------------------------------- SF
+  - id: SF-01
+    stage: SF
+    rule: "An MCP paper_id must match the paper-id pattern, contain no '..' and be a row of the papers table; a vault must be a research vault; a limit must be an integer clamped to 1..100 (read_paper 1..500)."
+    vi: "paper_id, vault và limit từ MCP được kiểm trước khi dùng (không '../', vault phải có thật, limit 1..100)."
+    pass: "../x, an absolute path, an unknown vault and limit -1 are refused or clamped."
+    fail: "A file outside knowledge_store/papers is read or an unlimited query runs."
+    level: fail
+    enforced_by: mcp_server._check_args
+    audit: [N14]
+    params: {max_limit: 100, max_limit_read_paper: 500}
+  - id: SF-02
+    stage: SF
+    rule: "Discussions are written create-only (open 'x'), only into research vaults, with a single-line title; two saves never overwrite each other."
+    vi: "Thảo luận ghi bằng chế độ chỉ-tạo-mới, chỉ vào vault nghiên cứu, tiêu đề một dòng; không bao giờ đè file."
+    pass: "Eight concurrent saves of one title make eight files."
+    fail: "A save overwrites another or writes into _Maps/Registry."
+    level: fail
+    enforced_by: discussions.save
+    audit: [N15]
+  - id: SF-03
+    stage: SF
+    rule: "Every destructive change first identifies what changes and keeps it recoverable (backup, removed/, history, snapshot); when unsure, quarantine or flag instead of deleting."
+    vi: "Mọi thay đổi phá hủy phải xác định phạm vi và giữ khôi phục được; không chắc thì cách ly hoặc gắn cờ, không xóa."
+    pass: "A snapshot or history copy exists for each data write and Mine/ hashes are unchanged."
+    fail: "Data is deleted irrecoverably."
+    level: fail
+    enforced_by: G3
+    audit: [AGENTS-safety]
+  - id: SF-04
+    stage: SF
+    rule: "Agents never delete source material, overwrite human notes, approve a knowledge gap or purge rejected papers; technical readiness is never scientific acceptance."
+    vi: "AI không tự xóa nguồn, đè note của người, duyệt knowledge gap hay loại bài; xong về kỹ thuật không phải được duyệt khoa học."
+    pass: "Such actions occur only with a recorded researcher decision."
+    fail: "An agent performs one alone."
+    level: fail
+    enforced_by: G3
+    audit: [AGENTS-approval]
+  - id: SF-05
+    stage: SF
+    rule: "A kb.py package or release never ships secrets, the researcher's library, private plans or audit reports (they quote papers), and a release reports leak_count 0."
+    vi: "Gói chia sẻ/phát hành không chứa khóa API, thư viện riêng, kế hoạch và báo cáo rà soát; leak_count phải bằng 0."
+    pass: "package.release returns no leaks."
+    fail: "A private file or a library trace is shipped (1 old test leak is open)."
+    level: fail
+    enforced_by: package.release
+    audit: [G1.4]
+  - id: SF-06
+    stage: SF
+    rule: "One writer at a time takes the library lock; long jobs run detached with a log, nothing edits code or config during a rebuild, and Mine/ hashes are verified after it."
+    vi: "Mỗi lúc chỉ một tiến trình ghi; việc dài chạy nền có log; không sửa code khi đang dựng lại; kiểm lại Mine/ sau đó."
+    pass: "A second writer waits or errors; Mine/ hashes are unchanged after a rebuild."
+    fail: "Two writers run, or Mine/ changes."
+    level: fail
+    enforced_by: workflow.writer_lock
+    audit: [AGENTS-7]
+  - id: SF-07
+    stage: SF
+    rule: "The software runs no server beyond the 127.0.0.1 search page and the stdio MCP process, installs no dependency without the researcher's approval, keeps API keys only in config/secrets.yaml, and sends no paper to an external AI without approval."
+    vi: "Không máy chủ nào ngoài trang tìm kiếm 127.0.0.1 và MCP stdio; không cài thêm thư viện, không gửi bài ra AI ngoài nếu chưa được đồng ý; khóa API chỉ ở secrets.yaml."
+    pass: "Only localhost listens; requirements are unchanged without approval."
+    fail: "An external listener, a new dependency or an unapproved upload is found."
+    level: fail
+    enforced_by: conform_network.probe_local_only
+    audit: [AGENTS-software]
+
+# Numbers and choices the researcher confirmed before the standard was frozen at v1.
+# All approved 2026-10-22 (DECISIONS D-PENDING-2): the recommended value is final and is what the params above hold.
+open_decisions:
+  - id: OD-01
+    clauses: [RL-09]
+    question_vi: "Node 'trung tâm' (hub) là node có mặt trong hơn bao nhiêu phần trăm số bài? Hub bị bỏ khi mở rộng suy luận."
+    recommended_vi: "50% số bài (ví dụ DNA có mặt trong 15/16 bài là hub)."
+    recommended: 0.5
+  - id: OD-02
+    clauses: [RT-05]
+    question_vi: "Khi độ phủ nhóm từ khóa của kết quả tốt nhất thấp hơn bao nhiêu thì báo 'không tìm thấy trong vault hiện tại'?"
+    recommended_vi: "Dưới 0,75 (3/4 số nhóm từ khóa) thì buộc trả lời 'không tìm thấy'."
+    recommended: 0.75
+  - id: OD-03
+    clauses: [NW-01]
+    question_vi: "Giới hạn cho nhánh neural: số token của prompt và dung lượng kết quả."
+    recommended_vi: "Fast khoảng 4 000 token, Deep khoảng 8 000 token, dung lượng tối đa 150 KB (hiện 0,7-1,1 MB và 10-15 nghìn token). Kế hoạch có chỗ ghi Fast 4 000, chỗ ghi 6 000: đề xuất 4 000, chỉ nới lên 6 000 nếu độ phủ không đạt."
+    recommended: {token_budget_fast: 4000, token_budget_deep: 8000, max_payload_kb: 150}
+  - id: OD-04
+    clauses: [NW-02, NW-09]
+    question_vi: "Mức đạt của bộ 8 câu hỏi chuẩn trên nhánh neural."
+    recommended_vi: "Độ phủ ý từ 0,77 trở lên; câu bắt buộc đầu tiên nằm trong 3 mục đầu; V5 và M3 trả 'không tìm thấy'; V3 có ít nhất 3/5 mắt xích."
+    recommended: {min_idea_coverage: 0.77, max_first_must_rank: 3, min_chain_links_of_5: 3}
+  - id: OD-05
+    clauses: [RT-03]
+    question_vi: "Tìm theo các dạng của một từ (vitrification, vitrified, vitrify): độ tìm lại (recall) tối thiểu."
+    recommended_vi: "Từ 0,9 trở lên (hiện chỉ 0,68)."
+    recommended: 0.9
+  - id: OD-06
+    clauses: [EV-17]
+    question_vi: "Tỉ lệ kết quả được phép thiếu hướng (tăng/giảm) hoặc thiếu loài sau khi phân tích."
+    recommended_vi: "Không quá 5% mỗi loại (hiện có AI để trống tới 94% hướng và 100% loài); phần code điền được thì code điền trước."
+    recommended: {max_empty_direction_share: 0.05, max_empty_species_share: 0.05}
+  - id: OD-07
+    clauses: [ND-05]
+    question_vi: "Khi nào một node được hiện trong vault? (đã quyết 13/10, xin xác nhận lại)"
+    recommended_vi: "Có ít nhất 1 đơn vị bằng chứng hoặc được nhắc từ 3 lần trong các bài của vault đó."
+    recommended: {min_evidence: 1, min_mentions: 3}
+  - id: OD-08
+    clauses: [EV-08]
+    question_vi: "Từ chỉ hướng của kết quả: giữ hay đổi sang bộ từ mới?"
+    recommended_vi: "Giữ bộ hiện có (increase, decrease, no_change, mixed, not_applicable) để khỏi phải đổi dữ liệu cũ; không thêm trường mới."
+    recommended: keep
+  - id: OD-09
+    clauses: [EV-01, EV-17]
+    question_vi: "Phân loại mức tri thức (kết quả / giả thuyết / bối cảnh trích dẫn / diễn giải): dùng trường mới hay dùng loại đơn vị hiện có?"
+    recommended_vi: "Dùng loại đơn vị hiện có (result, hypothesis, cited_statement, interpretation...), không thêm trường knowledge_level."
+    recommended: keep_unit_type
+  - id: OD-10
+    clauses: [RL-02, RL-04]
+    question_vi: "Hai bài đo cùng một thứ, cùng tác nhân nhưng khác loài (ví dụ H3K9me3 ở bò và ở chuột) có gọi là mâu thuẫn không?"
+    recommended_vi: "Có, giữ như quyết định 13/10 (là ngách nghiên cứu), nhưng tên note ghi loài của cả hai phía; chỉ tên loài đứng riêng không được coi là đại lượng đo."
+    recommended: conflict_with_both_species
+  - id: OD-11
+    clauses: [VN-08]
+    question_vi: "Ngôn ngữ của phần do máy viết trong note."
+    recommended_vi: "Tiêu đề mục và nội dung chuẩn bằng tiếng Anh; tiếng Việt chỉ dùng khi giải thích trong cuộc trò chuyện, không trộn trong một note."
+    recommended: english
+  - id: OD-12
+    clauses: [EV-06, AN-07]
+    question_vi: "'Không có ý nghĩa thống kê' có coi là mức dè dặt (hedge) không?"
+    recommended_vi: "Không: là nhóm riêng 'non_significance'; chỉ ý nói 'có thể/gợi ý' mới là hedge."
+    recommended: separate_category
+  - id: OD-13
+    clauses: []
+    question_vi: "Mức đạt khi cho một AI khác làm bộ đề chuẩn (kb.py ai-bench), để coi AI đó cho kết quả tương đương."
+    recommended_vi: "Qua bộ kiểm ngay lượt đầu từ 80%, trong tối đa 3 lượt từ 95%; giữ hedge 100%; khớp câu từ 0,9; điền đủ trường từ 0,95."
+    recommended: {first_try_pass: 0.8, within_3_attempts: 0.95, hedge_kept: 1.0, sentence_match: 0.9, fields_filled: 0.95}
+  - id: OD-14
+    clauses: [CH-02, CH-05]
+    question_vi: "Sai sót cắt câu còn lại trên bài thật sau khi trích lại: tối đa bao nhiêu thì chấp nhận?"
+    recommended_vi: "0 mảnh câu mồ côi trên bộ đề mẫu; trên kho thật phải báo cáo theo từng bài; lỗi còn lại do thư ký sửa hoặc ghi vào STATUS, không đẩy sang hàng chờ của nhà nghiên cứu."
+    recommended: 0

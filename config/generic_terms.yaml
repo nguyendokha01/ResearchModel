@@ -1,0 +1,15 @@
+# Words that describe how a study was run or reported, not research knowledge.
+# They never become a node (concept note), whatever an AI tag or keyword list proposes.
+# Matched like registry terms (case, plural, hyphen variants ignored). Researcher may edit; then run link-concepts.
+generic_terms:
+  - Clinical data
+  - Clinical features
+  - Laboratory data
+  - Healthy controls
+  - Patient selection
+  - Informed consent
+  - Exclusion criteria
+  - Inclusion criteria
+  - Statistical analysis
+  - Statistical significance
+  - Quality control

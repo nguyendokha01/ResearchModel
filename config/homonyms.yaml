@@ -1,0 +1,39 @@
+# Homonyms: a registry name that also means something else in a sentence.
+# key = the node's canonical name (case-insensitive); value = regular expressions (case-insensitive).
+# If ANY pattern matches the sentence, that sentence is NOT linked to that node (links, notes and node-card
+# tasks all follow). Add a line only after reading the sentences it would block. Applied at the next link-concepts.
+GO:   # graphene oxide is kept; Gene Ontology / "growing oocytes" are not it
+  - 'gene\s+ontology'
+  - 'growing\s+oocytes'
+  - 'GO\s*:\s*\d{4,}'
+  - '\bGO\s+(?:analys[ie]s|enrichment|terms?|annotations?|function)'
+  - '\bKEGG\b'
+SIRT:   # SIRT = an iterative image reconstruction method (tomography)
+  - 'reconstruct'
+  - 'tomograph'
+Filtration:   # gel filtration is a chromatography step, not the method node
+  - 'gel\s+filtration'
+Implantation:   # grafting of mesenchymal stem cells, not embryo implantation
+  - '\bMSCs?\b'
+  - 'mesenchymal'
+  - 'transplant'
+  - '\bgraft'
+HDA6:   # Quercus suber genes written with the species prefix
+  - '\bQs-?(?:HDA|HUB)\d'
+HDA19:
+  - '\bQs-?(?:HDA|HUB)\d'
+HUB1:
+  - '\bQs-?(?:HDA|HUB)\d'
+HUB2:
+  - '\bQs-?(?:HDA|HUB)\d'
+PCA:   # the node is Passive Cutaneous Anaphylaxis; in the library PCA is principal component analysis (statistics)
+  - 'principal\s+component'
+  - '\bPCA\s+(?:analys[ie]s|plots?|results?|scores?|loadings?|clusters?|biplots?)'
+  - '\bPCA-based'
+  - '\bPC[12]\b'
+Vitrification:   # the node also carries Glass Transition; polymer / materials physics is not vitrification
+  # block "glass transition" only when the sentence has no cryobiology word (real papers: "glass transition temperature of
+  # the vitrification solution", "...than equivalent concentrations of EG and GLY" stay linked)
+  - '(?s)^(?!.*(?:vitrif|cryo|warm|cool|freez|\bice\b|cells?\b|oocyte|embryo|sperm|tissue|(?-i:\b(?:EG|GLY|CPAs?)\b)|DMSO|glycerol|sucrose|trehalose|extracellular)).*glass(?:[\s-]+liquid)?\s+transition'
+Mater:   # the Mater gene (maternal antigen that embryos require); the dura mater of a brain is not it
+  - 'dura\s+mater'

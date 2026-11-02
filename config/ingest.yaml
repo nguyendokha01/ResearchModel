@@ -1,0 +1,43 @@
+# Settings for the ingestion and search app (scripts/kb.py).
+# Safe to edit. Lines starting with # are comments.
+
+ingest:
+  # No default vault: choose or create one on the Library page before importing.
+  default_vault: ""
+  # Where you drop new PDFs (any sub-folder inside counts as one batch).
+  inbox_folder: sources/inbox
+  # Where original PDFs are kept after ingestion (moved, never modified).
+  active_folder: sources/active
+  # Look up metadata online (Crossref, PubMed). Only the DOI or title is sent,
+  # never the PDF content. Set to false to work fully offline.
+  online_metadata: true
+  online_timeout_seconds: 15
+
+passages:
+  # Approximate size of one searchable passage, in characters.
+  target_chars: 1000
+  max_chars: 2000
+
+search:
+  results_per_query: 30
+  # Passages from the reference list are skipped unless asked for.
+  include_references_by_default: false
+  open_results_in_browser: true
+
+ocr:
+  # Read scanned pages (pages with almost no embedded text) with RapidOCR, offline.
+  # OCR text is labelled as OCR everywhere and the paper is put in the Review Queue.
+  enabled: true
+  # A page with fewer embedded characters than this (and at least one image) is OCR'd.
+  min_page_chars: 30
+  # Render resolution for OCR. 200 is a good balance; 150 is faster, 300 for tiny print.
+  dpi: 200
+  # Lines below this recognition confidence are counted as low-confidence in the review item.
+  low_confidence: 0.8
+
+analysis:
+  # Demo3: every body sentence in these sections needs a unit or an explicit skip reason.
+  # Abstract remains a reference; captions/table rows stay with their source objects.
+  coverage_policy: full_sections
+  require_structured_profiles: true
+  max_attempts: 3

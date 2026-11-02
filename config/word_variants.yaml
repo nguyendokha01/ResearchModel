@@ -1,0 +1,5 @@
+# Word variants for the QUERY side only (find.search, search.search): one group per line, a typed form matches the others.
+# Kept apart from synonyms.yaml on purpose: synonyms.yaml also builds the concept registry, and a variant group there would
+# add vitrified/vitrify... as synonyms of the Vitrification node and widen its links at the next link-concepts.
+# Added 2026-10-18 (RT-03): inflections of one verb; FTS5 porter stems vitrification and vitrified/vitrify differently.
+- [vitrification, vitrified, vitrify, vitrifies, vitrifying]

@@ -1,0 +1,41 @@
+# No automatic AI calls until the recipient explicitly configures a provider.
+ai:
+  provider: mcp_agent
+  deepseek:
+    model: deepseek-chat
+  gemini:
+    model: gemini-2.5-flash
+  codex_cli:
+    model: gpt-5.6-luna
+    reasoning: low
+  openai_compatible:
+    base_url: http://127.0.0.1:20128/v1
+    model: ''
+  anthropic:
+    model: claude-sonnet-5
+  ollama:
+    model: ''
+  openrouter:
+    model: ''
+  command:
+    run: []
+  tasks: {}
+  provider_timeouts:
+    codex_cli: 900
+    command: 900
+    deepseek: 300
+    gemini: 300
+    openai_compatible: 300
+    anthropic: 300
+    ollama: 300
+    openrouter: 300
+    mcp_agent: 300
+    none: 300
+  timeout_seconds: 300
+  fast:
+    max_items: 12
+  deep:
+    max_items: 30
+    queries: 3
+concept_notes:
+  language: vi

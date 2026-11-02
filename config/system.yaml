@@ -1,0 +1,35 @@
+system:
+  name: Biomedical Knowledge System
+  canonical_language: en
+
+storage:
+  original_pdf_policy: keep_or_archive
+  allow_ai_delete_originals: false
+
+ingestion:
+  incremental: true
+  max_batch_size: 100
+  preferred_batch_size: 50
+  duplicate_detection: true
+
+processing:
+  low_memory_mode: true
+  max_concurrent_papers: 2
+
+knowledge:
+  preserve_full_text: true
+  preserve_page_mapping: true
+  preserve_original_passages: true
+
+review:
+  require_human_approval_for_delete: true
+  require_human_approval_for_knowledge_gap: true
+
+# Candidate knowledge gaps (`kb.py gaps`): bounds that keep the candidate list reviewable.
+gaps:
+  max_per_type: 100
+  max_untested_combinations: 15
+
+vault:
+  default_search_scope: current_vault
+  allow_cross_vault_search: true

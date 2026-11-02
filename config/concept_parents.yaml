@@ -1,0 +1,4 @@
+# Broader/narrower concept pairs that are NOT synonyms: "child: parent".
+# The child stays its own concept (own note, own evidence) and is shown under the parent.
+# Names are matched like registry terms (case, hyphen and Greek-letter variants are ignored).
+beta-tubulin: Tubulin

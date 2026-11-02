@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="kb-token" content="__KB_TOKEN__"><title>Knowledge graph · Kho bài báo</title>
+<link rel="stylesheet" href="/static/graph.css">
+</head>
+<body>
+<header><a href="/">← Tìm kiếm</a><h1>Knowledge graph</h1><span id="status">Đang tải…</span><a class="graph-link" href="/neural">Kết quả · ghi chú</a>
+</header>
+<section class="controls">
+  <label>Vault <select id="vault"></select></label>
+  <label>Năm từ <input id="yearFrom" type="number" min="1800" max="2200"></label>
+  <label>đến <input id="yearTo" type="number" min="1800" max="2200"></label>
+  <label>Loài <select id="species"><option value="">Mọi loài</option></select></label>
+  <label>Loại quan hệ <select id="relation"><option value="">Mọi loại</option></select></label>
+  <button id="apply">Áp dụng</button>
+  <label>Loại node <select id="nodeKind"><option value="">Tất cả loại</option><option value="chemical">Hóa chất</option><option value="chemical_class">Nhóm hóa chất</option><option value="biological_entity">Thực thể sinh học</option><option value="method">Phương pháp</option><option value="concept">Kiến thức</option></select></label>
+  <fieldset><legend>Lớp</legend>
+    <label><input type="checkbox" data-layer="paper_concept" checked> Bài ↔ khái niệm</label>
+    <label><input type="checkbox" data-layer="citation" checked> Trích dẫn bài ↔ bài</label>
+    <label><input type="checkbox" data-layer="concept_parent" checked> Cây MeSH</label>
+    <label><input type="checkbox" data-layer="relation" checked> Quan hệ evidence</label>
+    <label><input type="checkbox" data-layer="discovered_citation" checked> Bài gợi ý OpenAlex</label>
+  </fieldset>
+</section>
+<p id="counts" class="muted"></p>
+<p class="muted">Khám phá gửi DOI của bài được chọn tới OpenAlex. Metadata trả về là gợi ý ngoài kho, chưa được xác minh; không tải hoặc nhập PDF tự động.</p>
+<div class="legend"><span class="paper">● Bài báo</span><span style="color:#D97706">● Hóa chất</span><span style="color:#B45309">● Nhóm hóa chất</span><span style="color:#9333EA">● Thực thể sinh học</span><span style="color:#0891B2">● Phương pháp</span><span style="color:#16A34A">● Kiến thức</span>
+  <span class="studied">— Nghiên cứu trực tiếp</span><span class="mentioned">⋯ Có nhắc</span>
+  <span class="citation">→ Trích dẫn</span><span class="parent">— Cha/nhánh</span></div>
+<section id="detail" class="detail" hidden></section>
+<main id="canvas"><svg id="graph" role="img" aria-label="Graph quan hệ tri thức"></svg></main>
+<script src="/static/graph.js"></script>
+</body></html>

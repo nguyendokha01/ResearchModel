@@ -1,0 +1,18 @@
+.lib-top{display:flex;align-items:center;gap:18px;padding:10px 18px}
+.lib-nav a{color:inherit}
+.lib{max-width:1100px;margin:0 auto;padding:12px 18px 40px}
+.card{border:1px solid #d7dbe0;border-radius:8px;padding:12px 16px;margin:14px 0;background:#fff}
+.card h2{font-size:17px;margin:2px 0 8px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.hint{color:#555;font-size:13px;margin:4px 0 8px}
+.small{font-size:12.5px;color:#555;margin-top:6px}
+.sep{color:#777}
+.drop{border:2px dashed #9aa6b2;border-radius:8px;padding:22px;text-align:center;color:inherit}
+.drop.over{background:rgba(47,111,206,.12);border-color:#2f6fce}
+.pick{color:#2f6fce;text-decoration:underline;cursor:pointer}
+button.big{padding:9px 12px;font-size:14px}
+.log{background:#11161c;color:#d8e0e8;max-height:320px;overflow:auto;padding:10px;border-radius:6px;font-size:12px;white-space:pre-wrap;min-height:40px}
+table.papers{width:100%;border-collapse:collapse;font-size:13px}
+table.papers td,table.papers th{border-bottom:1px solid #e6e8eb;padding:5px 6px;text-align:left;vertical-align:top}
+.st-done{color:#1d7a35}.st-review{color:#b36b00}.st-needs_fix{color:#b36b00}.st-pending{color:#666}
+@media (prefers-color-scheme:dark){.card{background:#1b2027;border-color:#333b45}.hint,.small{color:#aab}}

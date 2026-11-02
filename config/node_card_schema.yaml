@@ -1,0 +1,110 @@
+schema_version: 1
+title: Source-grounded typed node card
+allowed_types:
+  - substance
+  - technique
+  - protocol
+  - organism
+  - cell_type
+  - concept
+  - topic
+
+statement:
+  type: object
+  required: [text, sentence_ids, attribution, hedge]
+  properties:
+    text: {type: string, description: Canonical English paraphrase only}
+    sentence_ids: {type: array, items: {type: string}}
+    attribution: {enum: [primary, review, author_hypothesis, cited_study]}
+    hedge: {enum: [none, hedged]}
+
+not_found:
+  type: object
+  required: [status]
+  properties:
+    status: {enum: [not_found_in_vault]}
+
+common_fields:
+  definition: {kind: statement}
+  classification: {kind: statement}
+  function_or_purpose: {kind: statement}
+  importance: {kind: statement}
+  cautions: {kind: statement}
+  how_cited: {kind: statement}
+  cross_paper: {kind: statement}
+  related:
+    kind: related
+    relation_vocab:
+      - measures
+      - measured_by
+      - in_taxon
+      - uses_technique
+      - reagent_of
+      - marker_of
+      - derived_from
+      - parent_technique
+      - part_of
+      - associated_with
+
+types:
+  substance:
+    fields:
+      substance_class:
+        kind: enum
+        allowed: [small_molecule, protein, peptide, histone_mark, dna_modification, rna, steroid, mixture, other, unknown]
+      chem_roles:
+        kind: enum_list
+        allowed: [cryoprotectant, antioxidant, hormone, enzyme_inhibitor, epigenetic_modifier, growth_factor, stain_or_probe, other, unknown]
+      study_role:
+        kind: enum_list
+        allowed: [intervention, measured_marker, model, mention, other, unknown]
+      abbreviation: {kind: statement}
+      full_name: {kind: statement}
+      subclass_fields: {kind: statements_map}
+      concentrations_seen: {kind: concentration_rows}
+  technique:
+    fields:
+      category:
+        kind: enum
+        allowed: [imaging, sequencing, immunoassay, molecular_biology, embryology, cryobiology, micromanipulation, other, unknown]
+      abbreviation: {kind: statement}
+      full_name: {kind: statement}
+      principle: {kind: statement}
+      readout: {kind: statement}
+      measures: {kind: statement_list}
+      parent_technique: {kind: statement}
+      strengths: {kind: statement_list}
+      limitations: {kind: statement_list}
+  protocol:
+    fields:
+      purpose_scope: {kind: statement}
+      materials: {kind: material_rows}
+      equipment: {kind: statement_list}
+      steps: {kind: step_rows}
+      key_parameters: {kind: statement_list}
+      variants: {kind: variant_rows}
+  organism:
+    fields:
+      taxon_rank: {kind: statement}
+      common_name: {kind: statement}
+      strain_or_breed: {kind: statement}
+      model_use: {kind: statement_list}
+      usage: {kind: usage_rows}
+      interspecies_cautions: {kind: statement_list}
+  cell_type:
+    fields:
+      developmental_stage:
+        kind: enum_list
+        allowed: [GV, MI, MII, zygote, 2-cell, 4-cell, 8-cell, morula, blastocyst, other, unknown]
+      in_taxon: {kind: statement}
+      derived_from: {kind: statement}
+      markers: {kind: statement_list}
+  concept:
+    fields:
+      scope: {kind: statement}
+      key_points: {kind: statement_list}
+  topic:
+    fields:
+      scope: {kind: statement}
+      key_points: {kind: statement_list}
+      subtopics: {kind: statement_list}

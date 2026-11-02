@@ -1,0 +1,21 @@
+# Species wording found in source sentences -> the species name shown in notes.
+# Includes adjective forms (porcine -> Pig). Add a line to teach the system a new term.
+Human: [human, humans, woman, women]
+Mouse: [mouse, mice, murine]
+Rat: [rat, rats]
+Pig: [pig, pigs, porcine, swine]
+Bovine: [cattle, bovine, cow, cows]
+Ovine: [sheep, ovine]
+Goat: [goat, goats, caprine]
+Horse: [horse, horses, equine]
+Dog: [dog, dogs, canine]
+Cat: [cat, cats, feline]
+Rabbit: [rabbit, rabbits]
+Donkey: [donkey, donkeys]
+Buffalo: [buffalo, buffaloes]
+Monkey: [monkey, monkeys, macaque, macaques]
+Zebrafish: [zebrafish]
+# Words that are never a species label (also blocks a registry record of that name).
+_never_species: [animal, animals, organism, organisms, cell, cells, patient, patients, model, models, subject, subjects, individual, individuals]
+# Antibody/reagent hosts are never the study's species ("goat anti-mouse IgG", "rabbit polyclonal", "raised in rabbit", "normal goat serum").
+_reagent_hosts: [chicken, donkey, goat, horse, mouse, rabbit, rat, sheep, hamster]

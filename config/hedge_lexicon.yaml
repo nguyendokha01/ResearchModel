@@ -1,0 +1,116 @@
+# Editable dictionary of language that weakens, qualifies, or limits a claim.
+# Patterns are Python regular expressions and are compiled with Unicode matching.
+# Approximate numbers ("approximately 20 µm", "about 5%") are deliberately
+# excluded: approximation of a measurement is not, by itself, uncertainty about
+# the finding.  Add a claim-level phrase here only when its context warrants it.
+
+categories:
+  modal:
+    label_vi: "khả năng tình thái"
+    explanation: "Diễn đạt khả năng, không khẳng định."
+  appearance:
+    label_vi: "dấu hiệu hoặc vẻ ngoài"
+    explanation: "Nêu dấu hiệu quan sát được hoặc suy luận từ biểu hiện."
+  hypothesis:
+    label_vi: "niềm tin hoặc giả thuyết của tác giả"
+    explanation: "Ghi nhận suy nghĩ, giả thuyết hoặc đề xuất của tác giả."
+  association:
+    label_vi: "liên hệ, không phải nhân quả"
+    explanation: "Nêu mối liên hệ mà không khẳng định quan hệ nhân quả."
+  qualification:
+    label_vi: "ý nghĩa yếu hoặc ranh giới"
+    explanation: "Làm yếu mức độ chắc chắn hoặc ý nghĩa của nhận định."
+  non_significance:
+    label_vi: "không có ý nghĩa thống kê"
+    explanation: "Nêu kết quả không đạt hoặc không có ý nghĩa thống kê."
+  trend:
+    label_vi: "xu hướng"
+    explanation: "Nêu xu hướng chưa đủ để khẳng định một hiệu ứng."
+  scope:
+    label_vi: "phạm vi hoặc bằng chứng còn hạn chế"
+    explanation: "Giới hạn phạm vi, bối cảnh hoặc độ chắc chắn của nhận định."
+  negated_hedge:
+    label_vi: "phủ định mức độ chắc chắn"
+    explanation: "Cho biết nhận định không nhất thiết hoặc chưa có tính kết luận."
+  vietnamese:
+    label_vi: "từ giảm nhẹ tiếng Việt"
+    explanation: "Các từ tiếng Việt làm cho nhận định kém chắc chắn hơn."
+
+entries:
+  # Modal possibility
+  - {phrase: "may", category: modal, strength: moderate, example: "This may explain the difference."}
+  - {phrase: "might", category: modal, strength: strong, example: "The treatment might alter the response."}
+  - {regex: "(?<![\\w])could(?![\\w]|\\s+not\\b)", category: modal, strength: moderate, example: "This could reflect sampling variation."}
+  - {regex: "(?<![\\w-])possible(?!\\s+to\\b)(?![\\w])", category: modal, strength: moderate, example: "A possible mechanism is described."}
+  - {regex: "(?<![\\w-])potentially(?![\\w])", category: modal, strength: moderate, example: "The effect was potentially mediated by stress."}
+  - {phrase: "possibly", category: modal, strength: moderate, example: "The effect was possibly mediated by stress."}
+  # ``potential`` is a hedge only before an explicitly listed verb, or in
+  # ``has/have the potential to``.  Noun phrases such as ``potential toxicity``
+  # and ``developmental potential`` are not uncertainty markers.
+  - {regex: "(?<![\\w-])potential(?:ly)?\\s+(?:affect|alter|be|become|cause|change|contribute|decrease|explain|increase|improve|inhibit|influence|lead|mediate|modulate|occur|prevent|promote|reduce|reflect|regulate|result|support|trigger|vary)(?![\\w])", category: modal, strength: moderate, example: "The treatment could potentially reduce damage."}
+  - {regex: "(?<![\\w-])(?:has|have|had)\\s+the\\s+potential\\s+to(?![\\w])", category: modal, strength: moderate, example: "The method has the potential to improve survival."}
+  - {phrase: "perhaps", category: modal, strength: moderate, example: "Perhaps the control was insufficient."}
+  - {regex: "(?<![\\w-])probabl[ey](?![\\w])", category: modal, strength: weak, example: "The signal was probably transient."}
+  - {phrase: "likely", category: modal, strength: weak, example: "This is likely a technical artifact."}
+
+  # Appearance, evidential language, and author interpretation
+  - {regex: "(?<![\\w])seem(?:s)?(?![\\w])", category: appearance, strength: moderate, example: "The groups seem to differ."}
+  - {regex: "(?<![\\w])appear(?:s|ing)?\\s+to(?![\\w])", category: appearance, strength: moderate, example: "The cells appear to be enlarged."}
+  - {regex: "(?<![\\w])appear(?:s|ing)?(?![\\w])", category: appearance, strength: moderate, example: "The cells appear enlarged."}
+  - {regex: "(?<![\\w-])(?:apparently|apparent|indicative)(?![\\w])", category: appearance, strength: moderate, example: "The change was apparently reversible."}
+  - {regex: "(?<![\\w])look(?:s)?\\s+like(?![\\w])", category: appearance, strength: moderate, example: "This looks like a delayed response."}
+  - {regex: "(?<![\\w-])suggest(?:s|ed|ing|ive)?(?![\\w])", category: appearance, strength: moderate, example: "The data suggest a possible interaction."}
+  - {regex: "(?<![\\w-])propos(?:e|es|ed|ing)(?![\\w])", category: hypothesis, strength: moderate, example: "The proposed mechanism remains uncertain."}
+  - {regex: "(?<![\\w])indicate(?:s|d)?\\s+a\\s+possible(?![\\w])", category: appearance, strength: moderate, example: "The results indicate a possible mechanism."}
+  - {regex: "(?<![\\w-])presumabl[ey](?![\\w])", category: hypothesis, strength: moderate, example: "The difference was presumably biological."}
+  - {regex: "(?<![\\w-])(?:hypothes\\w*|speculat\\w*)", category: hypothesis, strength: moderate, example: "The authors hypothesized a role for stress."}
+  - {regex: "(?<![\\w])we\\s+(?:thought|think|believe|propose|hypothesize|speculate)(?![\\w])", category: hypothesis, strength: strong, example: "We thought this pathway was involved."}
+  - {regex: "(?<![\\w])putative(?![\\w])", category: hypothesis, strength: strong, example: "A putative binding site was identified."}
+
+  # Association is not causation
+  # Relational use only: "associated with", "was associated", "association".
+  # An adjective such as "associated disease states" is not an uncertainty marker.
+  # hedges.py also rejects "X-associated" compounds and organisation names ("American Medical
+  # Association", "Association for/of ...").
+  - {regex: "(?<![\\w-])(?:associat(?:e|es|ing)(?![\\w])|associated\\s+(?:with|to)|associations?|(?:is|are|was|were|be|been|being)\\s+(?:positively\\s+|negatively\\s+|significantly\\s+|strongly\\s+)?associated)(?![\\w])", category: association, strength: moderate, example: "The marker was associated with survival."}
+  - {regex: "(?<![\\w-])correlat(?:e|es|ed|ing|ion|ions)(?:\\s+with)?(?![\\w])", category: association, strength: moderate, example: "Expression correlated with dose."}
+  - {regex: "(?<![\\w-])link(?:ed|ing)?(?:\\s+to)?(?![\\w])", category: association, strength: moderate, example: "The phenotype was linked to age."}
+  - {regex: "(?<![\\w-])implicated\\s+in(?![\\w])", category: association, strength: moderate, example: "The pathway was implicated in stress response."}
+
+  # Weak or borderline significance and explicit non-significance
+  - {phrase: "slightly", category: qualification, strength: moderate, example: "The value was slightly higher."}
+  - {phrase: "barely", category: qualification, strength: moderate, example: "The value barely changed."}
+  - {phrase: "marginally", category: qualification, strength: moderate, example: "The response was marginally greater."}
+  - {phrase: "marginally significant", category: qualification, strength: moderate, example: "The result was marginally significant."}
+  - {phrase: "borderline", category: qualification, strength: moderate, example: "The result was borderline significant."}
+  - {regex: "(?<![\\w])consistent\\s+with(?![\\w])", category: qualification, strength: moderate, example: "The result was consistent with adaptation."}
+  - {regex: "(?<![\\w])in\\s+line\\s+with(?![\\w])", category: qualification, strength: moderate, example: "The result was in line with prior work."}
+  # p < 0.05 is a significant result, not a hedge. Only borderline values (p = 0.05–0.10) qualify a finding;
+  # p > 0.05 means not significant.
+  - {regex: "(?<![\\w])p\\s*=\\s*0?\\.(?:0[5-9]\\d*|10?0*)(?![\\d])", category: qualification, strength: moderate, example: "The comparison gave p = 0.07."}
+  - {regex: "(?<![\\w])p\\s*(?:>|≥|>=)\\s*0?\\.0?5\\d*(?![\\d])", category: non_significance, strength: strong, example: "No difference was found (P > 0.05)."}
+  - {phrase: "not really", category: negated_hedge, strength: strong, example: "The groups were not really different."}
+  - {phrase: "not necessarily", category: negated_hedge, strength: strong, example: "This is not necessarily causal."}
+  - {phrase: "not conclusive", category: negated_hedge, strength: strong, example: "The evidence is not conclusive."}
+  - {regex: "(?<![\\w])not\\s+(?:statistically\\s+)?significant(?![\\w])", category: non_significance, strength: strong, example: "The change was not statistically significant."}
+  - {regex: "(?<![\\w])not\\s+(?:statistically\\s+)?significantly\\s+(?:different|changed|affected|altered)(?![\\w])", category: non_significance, strength: strong, example: "It was not significantly different (P > 0.05)."}
+  - {regex: "(?<![\\w])no\\s+(?:statistically\\s+)?significant\\s+(?:difference|effect|change)s?(?![\\w])", category: non_significance, strength: strong, example: "There was no significant difference."}
+  - {regex: "(?<![\\w])did\\s+not\\s+reach\\s+significance(?![\\w])", category: non_significance, strength: strong, example: "The endpoint did not reach significance."}
+
+  # Trend and limited scope
+  - {regex: "(?<![\\w])trend(?:ed|s)?\\s+toward(?![\\w])", category: trend, strength: moderate, example: "Values trended toward recovery."}
+  - {regex: "(?<![\\w])tend(?:ed|s)?\\s+to(?![\\w])", category: trend, strength: moderate, example: "The treated cells tend to recover."}
+  - {regex: "(?<![\\w])suggestive\\s+of(?![\\w])", category: appearance, strength: moderate, example: "The pattern was suggestive of adaptation."}
+  - {phrase: "in our hands", category: scope, strength: moderate, example: "In our hands, the assay was reproducible."}
+  - {phrase: "to our knowledge", category: scope, strength: moderate, example: "To our knowledge, this is the first report."}
+  - {phrase: "preliminary", category: scope, strength: moderate, example: "These are preliminary observations."}
+  - {phrase: "further studies are needed", category: scope, strength: strong, example: "Further studies are needed to confirm this."}
+
+  # Vietnamese hedges; lookarounds avoid treating a substring inside a word as a hit.
+  - {regex: "(?<![\\w])(?:dường\\s+như|có\\s+vẻ(?:\\s+như)?|có\\s+thể|có\\s+lẽ|chưa\\s+chắc|hơi|chưa\\s+đủ|không\\s+thực\\s+sự|gợi\\s+ý|giả\\s+thuyết)(?![\\w])", category: vietnamese, strength: moderate, example: "Kết quả dường như khác biệt giữa các nhóm."}
+  # Vietnamese non-significance (AN-07): a claim that states a null result keeps the source's uncertainty.
+  - {regex: "(?<![\\w])(?:không|chưa)\\s+(?:có\\s+|đạt\\s+)?ý\\s+nghĩa(?:\\s+thống\\s+kê)?(?![\\w])", category: non_significance, strength: strong, example: "Sự khác biệt không có ý nghĩa thống kê."}
+  - {regex: "(?<![\\w])không\\s+(?:có\\s+)?(?:sự\\s+)?(?:khác\\s+biệt|thay\\s+đổi|chênh\\s+lệch)\\s+(?:có\\s+)?(?:ý\\s+nghĩa|đáng\\s+kể|rõ\\s+rệt)(?![\\w])", category: non_significance, strength: strong, example: "Không khác biệt có ý nghĩa giữa hai nhóm."}
+  - {regex: "(?<![\\w])không\\s+đáng\\s+kể(?![\\w])", category: non_significance, strength: strong, example: "Mức H3K9me3 thay đổi không đáng kể."}
+  # Words the answer checker used to keep in its own list (answer.VI_HEDGE, removed in G3).
+  - {regex: "(?<![\\w])(?:cho\\s+thấy\\s+khả\\s+năng|đề\\s+xuất|cho\\s+rằng|liên\\s+quan|có\\s+liên\\s+hệ|tương\\s+quan|chưa\\s+rõ|nghi\\s+ngờ|khả\\s+năng)(?![\\w])", category: vietnamese, strength: moderate, example: "Kết quả cho thấy khả năng có liên quan giữa hai nhóm."}

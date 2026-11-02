@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="kb-token" content="__KB_TOKEN__">
+<title>Tìm trong kho bài báo</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <form id="searchForm" class="search" autocomplete="off">
+    <a class="brand" href="/" title="Trang đầu">Kho<span>bài báo</span></a>
+    <div class="box">
+      <input id="q" name="q" type="search" placeholder="Hỏi hoặc gõ từ khóa, ví dụ: Muse cells ischemic stroke" autofocus>
+      <button type="submit" class="go" aria-label="Tìm">Tìm</button>
+    </div>
+  </form>
+  <a class="graph-link" href="#" id="overlapToggle" title="Dán một đoạn văn để xem câu nào trong kho có cùng từ ngữ">Dò trùng lặp</a>
+  <a class="graph-link" href="/neural?tab=result">Kết quả · Bảng · Hình</a>
+  <a class="graph-link" href="/graph">Knowledge graph</a>
+  <a class="graph-link" href="/library">Thư viện (nhập &amp; phân tích)</a>
+  <div class="controls">
+    <div class="tabs" role="tablist" id="viewTabs">
+      <button type="button" data-view="evidence4" class="on">Bốn phần · AI</button>
+      <button type="button" data-view="google">Google + AI</button>
+      <button type="button" data-view="report5">Báo cáo 5 phần</button>
+      <button type="button" data-view="table">Bảng so sánh</button>
+    </div>
+    <div class="seg" id="speedSeg" title="Nhanh: ít bằng chứng, trả lời trong vài giây. Sâu: tìm nhiều từ khóa hơn và đọc câu lân cận.">
+      <button type="button" data-speed="fast" class="on">Nhanh</button>
+      <button type="button" data-speed="deep">Sâu</button>
+    </div>
+    <label class="check" title="AI viết câu trả lời; tìm kiếm từ khóa và theo nghĩa vẫn chạy trên máy"><input type="checkbox" id="askAi"> AI trả lời</label>
+    <select id="vault" title="Kho (vault) để tìm"></select>
+    <span id="aiStatus" class="pill"></span>
+    <span id="meaningStatus" class="pill"></span>
+  </div>
+<a class="graph-link" href="/neural">Bàn nghiên cứu</a>
+</header>
+
+<div class="layout">
+  <aside id="filters" class="filters" hidden>
+    <details open>
+      <summary>Lọc kết quả</summary>
+      <div class="group">
+        <h4>Nguồn</h4>
+        <label><input type="radio" name="evidence" value="" checked> Tất cả</label>
+        <label><input type="radio" name="evidence" value="primary"> Chỉ bài gốc</label>
+        <label><input type="radio" name="evidence" value="review"> Chỉ bài tổng quan</label>
+      </div>
+      <div class="group" id="fType"><h4>Loại bằng chứng</h4></div>
+      <div class="group" id="fSection"><h4>Mục trong bài</h4></div>
+      <div class="group" id="fSpecies"><h4>Loài</h4></div>
+      <div class="group years">
+        <h4>Năm</h4>
+        <input id="yearFrom" type="number" placeholder="từ" min="1900" max="2100">
+        <input id="yearTo" type="number" placeholder="đến" min="1900" max="2100">
+      </div>
+      <button type="button" id="clearFilters" class="link">Bỏ lọc</button>
+    </details>
+  </aside>
+
+  <main id="main">
+    <section id="welcome" class="welcome">
+      <h1>Tìm trong kho bài báo của bạn</h1>
+      <p>Mọi kết quả là <b>nguyên văn</b> trong bài, kèm mục, trang và nút mở PDF đúng trang.
+        Câu trả lời của AI chỉ dùng các đoạn tìm được; code kiểm từng câu, câu không đạt bị <s>gạch</s> kèm lý do.</p>
+      <ul>
+        <li>Gõ từ khóa tiếng Anh hoặc câu hỏi tiếng Việt. Máy tìm cả theo từ khóa (có từ đồng nghĩa MeSH) lẫn theo nghĩa; bật AI thì câu tiếng Việt được đổi sang từ khóa tiếng Anh cho chính xác hơn.</li>
+        <li><code>"bone marrow"</code> trong ngoặc kép = đúng cụm từ.</li>
+        <li><b>Không thấy trong kho</b> không có nghĩa là không có trong y văn.</li>
+      </ul>
+    </section>
+    <section id="overlapPanel" class="overlap" hidden>
+      <h2>Dò trùng lặp từ ngữ (lexical overlap)</h2>
+      <p class="scope">Dán một đoạn tiếng Anh. Máy chỉ so cụm từ ngữ giống nhau với các câu đã lưu trong kho hiện tại; đây không phải kết luận đạo văn, người dùng tự đánh giá. Không thấy trong kho không có nghĩa là không có trong y văn.</p>
+      <textarea id="overlapText" rows="6" placeholder="Dán đoạn văn cần dò (một câu đến vài đoạn)"></textarea>
+      <div class="overlap-bar"><button type="button" id="overlapGo" class="go">Dò</button><span id="overlapStatus" class="status"></span></div>
+      <div id="overlapOut"></div>
+    </section>
+    <div id="status" class="status"></div>
+    <section id="aiPanel" class="ai" hidden></section>
+    <section id="results"></section>
+    <div id="more" class="more" hidden><button type="button" id="moreBtn">Xem thêm kết quả</button></div>
+  </main>
+</div>
+
+<div id="reader" class="reader" hidden>
+  <div class="reader-bar">
+    <button type="button" id="readerClose" class="close" aria-label="Đóng">×</button>
+    <div id="readerHead"></div>
+    <div class="tabs small" id="readerTabs">
+      <button type="button" data-tab="text" class="on">Toàn văn</button>
+      <button type="button" data-tab="units">Bằng chứng AI</button>
+      <button type="button" data-tab="objects">Bảng &amp; hình</button>
+      <button type="button" data-tab="refs">Tham khảo</button>
+    </div>
+  </div>
+  <div id="readerBody" class="reader-body"></div>
+</div>
+<div id="pop" class="pop" hidden></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

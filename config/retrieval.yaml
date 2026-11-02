@@ -1,0 +1,20 @@
+retrieval:
+  exact_search: true
+  full_text_search: true
+  metadata_filtering: true
+  semantic_search: optional
+
+answering:
+  require_evidence: true
+  require_paper_citation: true
+  require_section: true
+  require_page: true
+  require_original_passage: true
+  allow_model_memory_as_evidence: false
+  when_evidence_missing:
+    answer: not_found_in_current_knowledge_base
+
+context:
+  expand_neighboring_passages: true
+  check_methods_when_relevant: true
+  check_figures_when_relevant: true

@@ -1,0 +1,53 @@
+# Python environment (created on first run by "1 - Mo trang chinh.bat")
+.venv/
+__pycache__/
+*.pyc
+
+# Original sources: large binary files, never tracked by git.
+# Their location and SHA-256 hash are recorded in the knowledge store.
+sources/**/*.pdf
+sources/**/*.PDF
+sources/**/*.zip
+sources/**/*.ZIP
+review/pending/**/*.pdf
+review/pending/**/*.PDF
+
+# Machine knowledge store: large and rebuildable; back it up separately.
+knowledge_store/library.db
+knowledge_store/library.db-*
+knowledge_store/papers/
+knowledge_store/cache/
+knowledge_store/embeddings/
+knowledge_store/indexes/
+
+# Obsidian per-device UI state
+vaults/*/.obsidian/workspace*.json
+vaults/*/.obsidian/cache
+
+# Per-device desktop UI state (selected vault)
+knowledge_store/ui_preferences.json
+
+# API keys for the AI answers (config/ai.yaml); never commit
+config/secrets.yaml
+
+# Scratch copies made by agents for testing (safe to delete)
+.scratch_*/
+
+# Demo3 local state; never mix research data with development commits.
+runtime/
+migration_archive/
+.coordination/
+knowledge_store/
+vaults/
+sources/
+review/
+docs/demo3/inputs/
+
+# Claude Code review mark (per checkout)
+.claude/review_mark
+
+# Generated reports for the researcher
+output/
+
+# Release export: list of files the last export wrote
+.release_files

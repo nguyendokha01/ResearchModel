@@ -1,0 +1,5 @@
+# Optional metadata for the mother-vault registry.
+# The machine still discovers sub-vault directories under vaults/; this file
+# only supplies their kind and input types. Missing values default to research
+# and [pdf].
+vaults: {}

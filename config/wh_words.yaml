@@ -1,0 +1,30 @@
+# NW-10 question words: which WH slots a research-session question asks (neural.question_slots).
+# Matched on NFC + casefold text as whole tokens, the longest phrase first; a matched span is consumed, so a shorter
+# phrase inside it cannot match again ("khi nào" is `when`, never also `which`). No WH word -> what.
+# `lowercase_only` phrases match only when not written in capitals, in a question that has Vietnamese diacritics
+# (Vietnamese "ai" / "Ai" = who; the English "AI" is not).
+brainstorm: [brainstorm, brainstorming, động não]
+lowercase_only: [ai]
+slots:
+  what:
+    en: [what, how many, how much]
+    vi: [gì, cái gì, điều gì, những gì, bao nhiêu]
+  why:
+    en: [why, for what reason, how come]
+    vi: [tại sao, vì sao, vì lý do gì, lý do, do đâu, để làm gì]
+  which:
+    en: [which]
+    vi: [nào, khoảng cách nào]
+  when:
+    en: [when, how long, what time, at what stage, at which stage]
+    vi: [khi nào, lúc nào, bao giờ, bao lâu, thời điểm nào, giai đoạn nào, ngày nào]
+  who:
+    en: [who, whom, whose, which species, what species, which cell type, what cell type, which cell types, what cell types,
+         which cells]
+    vi: [ai, người nào, loài nào, loài gì, tế bào nào, tế bào gì, đối tượng nào]
+  where:
+    en: [where]
+    vi: [ở đâu, đâu, nơi nào, chỗ nào]
+  how:
+    en: [how, in what way, by what mechanism]
+    vi: [như thế nào, thế nào, bằng cách nào, cách nào, cách làm, làm sao, làm thế nào, ra sao]

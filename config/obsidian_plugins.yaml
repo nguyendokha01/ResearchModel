@@ -1,0 +1,52 @@
+# Obsidian community plugins approved by the researcher (chat 2026-10-05).
+# Pinned version + SHA-256 of each release file. The installer refuses files whose hash differs.
+# Files are cached in runtime/obsidian_plugins/<id>/<version>/ (not in git).
+# To approve a new version: update version and hashes here after reviewing the release.
+plugins:
+  dataview:
+    repo: blacksmithgu/obsidian-dataview
+    version: "0.5.70"
+    files:
+      main.js: 6bb1cf7010afad830e73575fca0e2bfbd3279c562e3d9d24f2d2f45161eb7d00
+      manifest.json: 9235db47112da81b85591c79ecb9ae2574e5e72207056e976472f90616286185
+      styles.css: 3306dd9032e00f989ba7233a37fd255bc4d3f4340cee661762e952f3f6aa1de9
+    # Written only when the vault has no data.json for the plugin yet (researcher settings are never replaced).
+    # JavaScript queries stay off: DataviewJS can read/write files and use the network.
+    default_settings:
+      enableDataviewJs: false
+      enableInlineDataviewJs: false
+  extended-graph:
+    repo: ElsaTam/obsidian-extended-graph
+    version: "2.7.7"
+    files:
+      main.js: 025616a1d0752aa4b0ca01fcd4e71a49b6dbd8284f9a8725f2624d5bba15055a
+      manifest.json: d02c3be055973d8e79a0d6fe56f9aa32d71ccbb3cf55d0ce83b0f1c64905a772
+      styles.css: ce754cb01a6435e83c0197f765feee866896556f14cff24166bf399c3a329cef
+    # Link type = frontmatter key holding the link. Red only for conflicts (docs/ARCHITECTURE.md section 5).
+    # External images stay off (no network). Missing keys are filled by the plugin's own defaults.
+    default_settings:
+      enableFeatures:
+        graph: {links: true, shapes: true}
+        localgraph: {links: true, shapes: true, arrows: true}
+      allowExternalImages: false
+      allowExternalLocalImages: false
+      syncDefaultState: true   # notes.sync_extended_graph
+      interactiveSettings:
+        link:
+          colormap: gray   # unlisted link types stay grey; red is reserved for conflicts
+          colors:
+            - {type: conflicts_with, color: "#dc2626"}
+            - {type: opposes, color: "#dc2626"}
+            - {type: supports, color: "#15803d"}
+            - {type: none, color: "#94a3b8"}
+          unselected: []
+          excludeRegex: {regex: "", flags: ""}
+          noneType: none
+          showOnGraph: true
+          enableByDefault: true
+      shapes:
+        square: [paper, source]
+        triangle: [claim, hypothesis]
+        diamond: [result]
+        star6: [conflict]
+        hexagon: [moc]

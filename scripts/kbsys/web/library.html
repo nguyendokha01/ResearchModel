@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="kb-token" content="__KB_TOKEN__">
+<title>Thư viện — nhập và phân tích bài</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/library.css">
+</head>
+<body>
+<header class="top lib-top">
+  <a class="brand" href="/" title="Tìm kiếm">Kho<span>bài báo</span></a>
+  <nav class="lib-nav"><a href="/">Tìm kiếm</a> · <a href="/graph">Knowledge graph</a> · <b>Thư viện</b></nav>
+<a class="graph-link" href="/neural">Mạng ghi chú · từng bước</a>
+</header>
+<main class="lib">
+  <section class="card">
+    <h2>1. Chủ đề (vault)</h2>
+    <p class="hint">Mỗi chủ đề nghiên cứu là một vault riêng (một thư mục Obsidian). Bài báo được lưu một lần trong kho chung;
+      một bài có thể thuộc nhiều vault.</p>
+    <div class="row">
+      <label>Đang làm việc với: <select id="vaultSel"></select></label>
+      <span class="sep">hoặc tạo mới:</span>
+      <input id="newName" placeholder="Tên chủ đề, vd: Tế bào Muse" size="26">
+      <input id="newTopic" placeholder="Mô tả ngắn chủ đề (giúp AI phân loại bài)" size="40">
+      <button id="createVault">Tạo vault</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>2. Thêm nguồn</h2>
+    <p class="hint">Kéo thả hoặc chọn PDF, ZIP (tự giải nén), hoặc file bổ sung (XLSX/CSV, tên có chữ “supp” hay “S1”).
+      Tệp được chép vào <code>sources/inbox/batches/</code>; PDF gốc không bao giờ bị sửa.</p>
+    <div id="drop" class="drop">Thả tệp vào đây hoặc <label class="pick">chọn tệp<input id="files" type="file" multiple
+      accept=".pdf,.zip,.xlsx,.xlsm,.csv" hidden></label></div>
+    <div id="uploadLog" class="small"></div>
+    <div class="small">Đang chờ nhập: <span id="inboxCount">0</span> tệp</div>
+  </section>
+
+  <section class="card">
+    <h2>3. Chạy</h2>
+    <div class="row">
+      <button id="runIngest" class="big">① Nhập bài (đọc PDF, tách câu, bảng, trích dẫn)</button>
+      <button id="runAnalyze" class="big">② Phân tích bằng AI (băm bằng chứng có kiểm tra)</button>
+      <button id="runConnect" class="big">③ Kết nối (khái niệm, mâu thuẫn, Concept notes)</button>
+    </div>
+    <p class="hint" id="aiLine"></p>
+    <details><summary>Dùng ứng dụng AI qua MCP (Claude Desktop, Codex, Gemini CLI, Cursor…)</summary>
+      <p id="mcpHint" class="hint"></p></details>
+    <pre id="jobLog" class="log" aria-live="polite"></pre>
+  </section>
+
+  <section class="card">
+    <h2>4. Bài trong vault <span id="vaultName"></span></h2>
+    <p class="small" id="summary"></p>
+    <p class="small" id="removeMsg" aria-live="polite"></p>
+    <table class="papers"><thead><tr><th>Bài</th><th>Năm</th><th>Trạng thái</th><th>Bằng chứng</th><th>Chữ</th><th></th></tr></thead>
+      <tbody id="paperRows"></tbody></table>
+  </section>
+</main>
+<script src="/static/library.js"></script>
+</body>
+</html>

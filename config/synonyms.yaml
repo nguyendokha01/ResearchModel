@@ -1,0 +1,39 @@
+# Synonym groups used to expand searches.
+# When you search for any term in a group, all terms in that group are searched.
+# One group per line, as a list. Matching is case-insensitive.
+# Add groups only when you have checked that the terms really are equivalent.
+#
+# Example format (remove the # to activate):
+# - [CDK1, cyclin-dependent kinase 1, p34cdc2]
+# - [MMP, mitochondrial membrane potential]
+
+# Added 2026-10-05 by Claude (project lead) after the vault review (vault review of 2026-10-05, item 15):
+# lexical duplicates that split one entity's evidence across two notes. Remove a line to undo; registry IDs are kept.
+# The remaining imported spelling variants are listed below; quotations stay
+# source-specific even when the registry displays one canonical node.
+- [ethylene glycol, EG]
+- [cryoprotective agent, cryoprotectant, CPA]
+- [mouse, murine]
+- [cattle, bovine]
+- [pig, porcine]
+- [sheep, ovine]
+- [histone H3, H3]
+- [histone H4, H4]
+- [confocal, confocal microscopy]
+- [animal experiment, animal experiments]
+- [animal experiment, animal experimentation]
+- [RT-qPCR, RTqPCR]
+- [m6A, m 6A]
+# Reviewed as lexical duplicates for the node registry.  The source quotations remain unchanged.
+# (beta-tubulin is a subunit, not a synonym of tubulin: see config/concept_parents.yaml.)
+- [confocal microscopy, confocal laser scanning microscopy]
+# Added 2026-10-12 (node-card review): same entity written two ways; merged on the next link-concepts.
+- [TUNEL assay, TUNEL staining]
+- [Gene Ontology analysis, Gene Ontology enrichment]
+- [IL-1 receptor 2, IL-1R2]
+# DNMT = DNA methyltransferase family; "DNA (cytosine-5-)-methyltransferase" (EC 2.1.1.37) is the same enzyme class.
+# DNMT1 / DNMT2 / DNMT3A / DNMT3B stay separate nodes (children, not synonyms).
+- [DNA methyltransferase, DNMT, DNA (cytosine-5-)-methyltransferase]
+# Added 2026-10-18 (ND-03): same word, two spellings (the key normaliser cannot see an extra letter).
+- [Blastocoel, Blastocoele]
+- [Blastocoel collapse, Blastocoele collapse]
