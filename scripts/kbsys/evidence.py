@@ -12,7 +12,7 @@ import re
 import time
 from datetime import datetime
 
-from . import concepts, config, db, hedges, mesh, notes
+from . import concepts, config, db, domain, hedges, mesh, notes
 from .sentences import MENTION, numbers
 
 UNIT_TYPES = {"result", "method_detail", "interpretation", "hypothesis", "conclusion", "limitation",
@@ -88,14 +88,7 @@ DOSE_UNIT = re.compile(r"\d\s*(?:%|°C|µ[gMLl]|μ[gMLl]|mM|nM|pM|mg|ng|g/|kg|mL
                        r"min|minutes?|days?|weeks?|months?|×|x\s?10)", re.I)
 STOPWORDS = {"the", "and", "for", "with", "from", "into", "that", "this", "cell", "cells", "total", "number",
              "level", "levels", "rate", "ratio", "value", "values", "after", "before", "per", "via", "using"}
-SPECIES_SYNONYMS = {
-    "mouse": ["mice", "murine", "mouse"], "rat": ["rats", "rat"], "human": ["human", "humans", "patient", "patients",
-    "volunteer", "volunteers", "subjects"], "bovine": ["bovine", "cattle", "cow", "cows", "calf", "calves"],
-    "porcine": ["porcine", "pig", "pigs", "swine"], "ovine": ["ovine", "sheep", "ewe", "ewes"],
-    "caprine": ["caprine", "goat", "goats"], "equine": ["equine", "horse", "horses", "mare", "mares"],
-    "canine": ["canine", "dog", "dogs"], "feline": ["feline", "cat", "cats"], "rabbit": ["rabbit", "rabbits"],
-    "primate": ["monkey", "monkeys", "macaque", "macaques", "marmoset", "primate"],
-}
+SPECIES_SYNONYMS = domain.profile()["species"]  # config/domain/<domain>.yaml
 
 
 # ---------------------------------------------------------------- helpers
@@ -698,11 +691,13 @@ def _check_unit(ctx, i, unit, review_paper, err, flag, normalized, warn=None, le
             err(i, "V1", f"{name} must be an object (or omitted)")
             return None
 
-    # EV-17: an empty direction / species of a result is filled by code from the cited source; an AI value is never replaced
+    # EV-17: an empty direction / species of a result is filled by code from the cited source; an AI value is never replaced.
+    # A later AI fill of a stored unit (G5) records {"by": "ai", "source": ...} so every filled field keeps its provenance.
     from . import evidence_fill  # late: evidence_fill imports this module
     prior = unit.get("filled_by") if isinstance(unit.get("filled_by"), dict) else {}
+    sources = {_short(s) for s in sids} | {"paper:title", "paper:abstract"}  # a claimed source must be one the unit cites
     filled_by = {k: v for k, v in prior.items() if k in ("direction", "species") and isinstance(v, dict)  # a recheck keeps them
-                 and v.get("by") == "rule" and (outcome if k == "direction" else model).get(k)}
+                 and v.get("by") in ("rule", "ai") and v.get("source") in sources and (outcome if k == "direction" else model).get(k)}
     for field, hit in evidence_fill.fill_fields(unit, sents, ctx.meta).items():
         if field == "direction":
             outcome = {**outcome, field: hit["value"]}
@@ -931,7 +926,7 @@ def _check_unit(ctx, i, unit, review_paper, err, flag, normalized, warn=None, le
     }
     if claim_ids:  # the key exists only when the analyst gave it (old units and fingerprints stay as they were)
         stored["hedged_sentence_ids"] = claim_ids
-    if filled_by:  # only when code filled a field (EV-17); crosscheck._fingerprint does not hash it
+    if filled_by:  # only when a field was filled (EV-17: rule or a later AI fill); crosscheck._fingerprint does not hash it
         stored["filled_by"] = filled_by
     return stored
 

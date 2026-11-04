@@ -11,7 +11,9 @@ import json
 import mimetypes
 import shutil
 import subprocess
+import sys
 import tempfile
+import time
 import urllib.request
 from pathlib import Path
 
@@ -176,6 +178,30 @@ def call(settings, system, user, image_paths=()):
     if provider in {"gemini", "openai_compatible", "openrouter", "ollama"}:
         return _openai_image_call(settings, system, user, images)
     raise ImageInputUnsupported(f"image input unsupported for provider {provider}")
+
+
+def logged_call(call_fn, log_path, stage, settings, system, user, extra=None, **kw):
+    """Run call_fn(settings, system, user, **kw) and append ONE usage row to log_path (the one usage-log format
+    of all four AI loops). No key or prompt text is logged; a log write error is reported, never raised."""
+    started = time.monotonic()
+    entry = {"time": config.now(), "provider": settings["provider"], "model": answer.model_of(settings),
+             "stage": stage, "input_chars": len(system) + len(user), "request_sha256": fingerprint([system, user]),
+             **(extra or {})}
+    try:
+        raw, usage = call_fn(settings, system, user, **kw)
+        entry.update(output_chars=len(raw), usage=normalized_usage(usage), provider_usage=usage, status="returned")
+        return raw, usage
+    except BaseException as exc:  # an interrupt still leaves a complete row
+        entry.update(status="failed", usage={}, error=type(exc).__name__)
+        raise
+    finally:
+        entry["elapsed_seconds"] = round(time.monotonic() - started, 3)
+        try:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            with log_path.open("a", encoding="utf-8", newline="\n") as f:
+                f.write(dumps(entry) + "\n")
+        except OSError as exc:
+            print(f"usage log not written ({log_path.name}): {exc}", file=sys.stderr)
 
 
 def dumps(value):

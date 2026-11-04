@@ -1,0 +1,3 @@
+# Generic (non-biomedical) domain profile: no species vocabulary, no MeSH. See biomedical.yaml for the keys.
+use_mesh: false
+species: {}

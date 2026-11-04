@@ -15,7 +15,7 @@ import sqlite3
 import urllib.request
 import xml.etree.ElementTree as ET
 
-from . import config
+from . import config, domain
 
 MESH_DIR = config.STORE / "indexes" / "mesh"
 MESH_DB = config.STORE / "indexes" / "mesh.sqlite"
@@ -112,7 +112,7 @@ _tree_to_descriptor = None
 
 
 def available():
-    return MESH_DB.is_file()
+    return domain.profile()["use_mesh"] and MESH_DB.is_file()
 
 
 def _db():

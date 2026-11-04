@@ -236,7 +236,7 @@ def provider_status(s=None):
         return {"ready": False, "provider": p, "mcp": True,
                 "message": "AI chạy qua MCP: mở ứng dụng AI đã nối MCP (Claude Desktop, Claude Code, Codex, "
                            "Gemini CLI, Cursor…) và nhờ nó làm việc; xem HUONG_DAN.md, mục “Chọn AI”."}
-    if p in ("deepseek", "gemini", "anthropic", "openrouter") and not _secret(f"{p}_api_key"):
+    if p in KEY_NEEDED and not _secret(f"{p}_api_key"):
         return {"ready": False, "provider": p,
                 "message": f"Thiếu key hoặc đọc không được: thêm dòng {p}_api_key: ... vào config/secrets.yaml"}
     if p in ("openai_compatible", "ollama", "openrouter") and not s[p].get("model"):
@@ -255,6 +255,44 @@ def provider_status(s=None):
                 "message": f"AI: Codex (tài khoản đang đăng nhập) · {s[p].get('model') or 'model mặc định'}"}
     model = s[p].get("model", "")
     return {"ready": True, "provider": p, "model": model, "message": f"AI: {p} · {model}"}
+
+
+AI_TASKS = ("answer", "analysis", "synthesis", "enrichment", "crosscheck", "figure_reading", "node_card")  # every settings(<task>) caller
+KEY_NEEDED = ("deepseek", "gemini", "anthropic", "openrouter")   # provider_status refuses these without <p>_api_key
+KEY_PROVIDERS = KEY_NEEDED + ("openai_compatible", "ollama")       # every <p>_api_key read by _secret (the last two optional)
+
+
+def mask_secrets(text):
+    """The whole key, then any 4+ character piece of it (an error body cut at 300 characters, "sk-...abcd"), as ***."""
+    secrets = [v for v in (_secret(f"{p}_api_key") for p in KEY_PROVIDERS) if v]
+    for v in secrets:
+        text = str(text).replace(v, "***")
+    return re.sub(r"[\w-]{4,}", lambda m: "***" if any(m.group() in v for v in secrets) else m.group(), str(text))
+
+
+def ai_check(call=False):
+    """`kb.py ai-check`: provider + readiness per AI task; key only as present/missing, never its value.
+
+    With `call` one tiny prompt goes through _chat to each ready provider (once per provider+model); otherwise nothing is sent."""
+    clean = mask_secrets
+    rows, called = [], {}
+    for task in AI_TASKS:
+        s = settings(task)
+        status = provider_status(s)
+        row = {"task": task, "provider": status["provider"], "ready": status["ready"], "message": clean(status["message"]),
+               "key": "present" if _secret(f"{status['provider']}_api_key") else
+               "missing" if status["provider"] in KEY_NEEDED else "not needed"}
+        if call and status["ready"]:
+            who = (status["provider"], model_of(s))
+            if who not in called:
+                try:
+                    text, _ = _chat(s, "You are a connection test.", 'Reply with the JSON {"ok": true}.')   # json_mode providers refuse a prompt without "JSON"
+                    called[who] = {"ok": True, "reply": clean(text)[:80]}
+                except Exception as e:  # any provider failure is a report line, not a crash; AIError text is already Vietnamese
+                    called[who] = {"ok": False, "error": clean(e)[:300]}
+            row["call"] = called[who]
+        rows.append(row)
+    return rows
 
 
 # ---------------------------------------------------------------- calling the model

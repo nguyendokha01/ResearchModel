@@ -1,0 +1,17 @@
+# Domain profile (chosen by `domain:` in config/system.yaml). Library-wide: the concept registry is shared by all vaults.
+# species: study-species key -> words that name it in text (evidence.SPECIES_SYNONYMS; EV-17 species fill, find-term expansion).
+# use_mesh: true -> MeSH lookups/expansion are used when the local MeSH index exists; false -> mesh.available() is False.
+use_mesh: true
+species:
+  mouse: [mice, murine, mouse]
+  rat: [rats, rat]
+  human: [human, humans, patient, patients, volunteer, volunteers, subjects]
+  bovine: [bovine, cattle, cow, cows, calf, calves]
+  porcine: [porcine, pig, pigs, swine]
+  ovine: [ovine, sheep, ewe, ewes]
+  caprine: [caprine, goat, goats]
+  equine: [equine, horse, horses, mare, mares]
+  canine: [canine, dog, dogs]
+  feline: [feline, cat, cats]
+  rabbit: [rabbit, rabbits]
+  primate: [monkey, monkeys, macaque, macaques, marmoset, primate]

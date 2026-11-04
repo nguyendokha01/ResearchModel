@@ -797,8 +797,10 @@ def run(paper_id, object_id, provider=None, model=None, reasoning=None, max_atte
             saved_path, saved = None, None
         else:
             try:
-                raw, usage = analysis_transport.call(settings, system, _run_user(payload, previous, problems),
-                                                     image_paths=[crop])
+                raw, usage = analysis_transport.logged_call(
+                    analysis_transport.call, db.paper_dir(paper_id) / "analysis_usage.jsonl", "figure_reading",
+                    settings, system, _run_user(payload, previous, problems), extra={"object_id": object_id},
+                    image_paths=[crop])
             except answer.ProviderTimeout as exc:
                 return {"status": "provider_timeout", "attempts": attempts, "tokens": usage_total,
                         "provider": exc.provider, "timeout": exc.timeout, "error": str(exc),

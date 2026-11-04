@@ -33,3 +33,6 @@ gaps:
 vault:
   default_search_scope: current_vault
   allow_cross_vault_search: true
+
+# Domain profile (config/domain/<name>.yaml): species vocabulary and MeSH. Library-wide; biomedical when absent.
+domain: biomedical

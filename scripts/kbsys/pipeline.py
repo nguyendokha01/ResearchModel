@@ -1,4 +1,5 @@
 """Restartable, independently runnable stages. One paper and one writer at a time."""
+from collections import Counter
 from contextlib import nullcontext
 
 from . import config, db, workflow
@@ -143,6 +144,43 @@ def run(con, cfg, vault, step, say=print, limit=None, structured_ai=False, struc
                 return sorted(set(config.vault_dir(vault).rglob('*.md')) | {config.vault_dir(vault) / 'Home.md'})
             operation = lambda: rebuild_vault_notes(con, vault, say)
         return [workflow.checkpoint(step, vault, inputs, outputs, operation, options)]
+
+def _mine_hashes(vault):
+    import hashlib
+    mine = config.vault_dir(vault) / 'Mine'
+    return {str(p.relative_to(mine)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(mine.rglob('*')) if p.is_file()}
+
+def run_all(con, cfg, vault, ai=False, until=None, say=print):
+    """G6 U1: every stage in order through `run` (its checkpoints skip unchanged work), after one vault snapshot.
+    `analyze` needs `ai` (it calls the configured provider). The first stage that raises stops the run (report['failed'])."""
+    import time
+    from . import vault_layout
+    if until is not None and until not in STEPS:
+        raise ValueError('Unknown stage')
+    if not config.is_research_vault_name(vault) or not config.vault_dir(vault).is_dir():  # '' / '..' would snapshot vaults/ or the root
+        raise ValueError('Choose an existing vault')
+    before = _mine_hashes(vault)
+    with workflow.writer_lock():  # a consistent backup: no other writer mid-copy
+        report = {'vault': vault, 'steps': [], 'snapshot': vault_layout._research_workspace().snapshot(con, vault)['snapshot']}
+    for step in STEPS[:STEPS.index(until) + 1 if until else None]:
+        if step == 'analyze' and not ai:
+            report['steps'].append({'step': step, 'status': 'skipped (needs --ai)', 'seconds': 0, 'result': None})
+            continue
+        started = time.perf_counter()
+        try:
+            states = run(con, cfg, vault, step, say=say)
+        except Exception as exc:  # stop here and report; the caller exits 1
+            report['steps'].append({'step': step, 'status': 'failed', 'seconds': round(time.perf_counter() - started, 2),
+                                    'result': f'{type(exc).__name__}: {exc}'})
+            report['failed'] = step
+            break
+        counts = dict(Counter((s.get('status') or '?') + (' (cache)' if s.get('cache_hit') else '') for s in states))
+        done = all(state.get('status') == 'done' for state in states)  # a waiting state (no AI, failed PDF) is not done
+        report['steps'].append({'step': step, 'status': 'done' if done else 'waiting', 'seconds': round(time.perf_counter() - started, 2), 'result': counts})
+    after = _mine_hashes(vault)
+    report['mine_changed'] = sorted(k for k in before.keys() | after.keys() if before.get(k) != after.get(k))
+    report['mine_unchanged'] = not report['mine_changed']
+    return report
 
 def _vector_outputs(vectors, pids):
     outputs = [vectors.INDEX_JSON] + [vectors._paper_file(pid) for pid in pids]

@@ -10,7 +10,6 @@ here: an MCP-connected AI app does the same work through the analysis tools.
 import json
 from contextlib import nullcontext
 from pathlib import Path
-import time
 import uuid
 
 from . import answer, config, db, evidence, quality, workflow, analysis_transport as transport
@@ -67,13 +66,18 @@ def _reading_text(con, paper_id):
     return transport.compact_reading(view["sentences"]), view
 
 
-def usage_report(paper_id):
-    rows = list(db.read_jsonl(db.paper_dir(paper_id) / "analysis_usage.jsonl"))
+def usage_report(paper_id=None):
+    """Usage of a paper's loops (evidence, structured, figure_reading); no paper_id = the node-card log."""
+    path = db.paper_dir(paper_id) / "analysis_usage.jsonl" if paper_id else config.LOGS_DIR / "ai_usage.jsonl"
+    rows = list(db.read_jsonl(path))
+    by_stage = {}
+    for row in rows:
+        by_stage[row.get("stage")] = by_stage.get(row.get("stage"), 0) + 1
     totals = {}
     for row in rows:
         for key, value in (row.get("usage") or {}).items():
             totals[key] = totals.get(key, 0) + value
-    return {"paper_id": paper_id, "calls": len(rows), "reported_token_totals": totals,
+    return {"paper_id": paper_id, "calls": len(rows), "calls_by_stage": by_stage, "reported_token_totals": totals,
             "calls_without_token_counts": sum(not any(k in (r.get("usage") or {})
                                                       for k in ("input_tokens", "output_tokens")) for r in rows),
             "input_chars": sum(r.get("input_chars", 0) for r in rows),
@@ -81,21 +85,8 @@ def usage_report(paper_id):
 
 
 def _call(s, system, user, paper_id, stage):
-    started = time.monotonic()
-    entry = {"time": config.now(), "provider": s["provider"], "model": answer.model_of(s), "stage": stage,
-             "input_chars": len(system) + len(user), "request_sha256": transport.fingerprint([system, user])}
-    try:
-        raw, usage = answer._chat(s, system, user)
-        entry.update(output_chars=len(raw), usage=transport.normalized_usage(usage),
-                     provider_usage=usage, status="returned")
-        return raw
-    except Exception:
-        entry.update(status="failed", usage={})
-        raise
-    finally:
-        entry["elapsed_seconds"] = round(time.monotonic() - started, 3)
-        with (db.paper_dir(paper_id) / "analysis_usage.jsonl").open("a", encoding="utf-8", newline="\n") as f:
-            f.write(transport.dumps(entry) + "\n")
+    return transport.logged_call(answer._chat, db.paper_dir(paper_id) / "analysis_usage.jsonl", stage,
+                                 s, system, user)[0]
 
 
 def analyze_paper(con, paper_id, vault, say=print):
@@ -244,20 +235,8 @@ def run(con, vault, say=print, limit=None):
             totals["errors"] += 1
     return totals
 
-def run_structured(con, paper_id, kind='both', allow_ai=False, max_chunks=1, provider=None, model=None, reasoning=None):
-    """Explicit bounded profile work; never calls evidence analysis or an answer fallback."""
-    from . import structure, workflow
-    if kind not in ('overview', 'wh', 'protocol', 'both', 'all') or not isinstance(max_chunks, int) or not 1 <= max_chunks <= 20:
-        raise ValueError('Choose overview|wh|protocol|both|all and max_chunks from 1 to 20')
-    profiles = structure.completion(paper_id)
-    kinds = ('overview', 'wh', 'protocol') if kind == 'all' else ('wh', 'protocol') if kind == 'both' else (kind,)
-    needed = [k for k in kinds if not profiles[k]['ready']]
-    if not needed:
-        return {'status': 'complete', 'overall_complete': profiles['complete'], 'calls': 0, 'profiles': profiles, 'scientific_acceptance': 'not_assessed'}
-    next_action = 'Use structured-prepare/structured-submit, or explicitly configure ai.tasks.analysis and run structured-run <paper> --kind overview --ai --max-chunks 1.'
-    if not allow_ai:
-        return {'status': 'waiting', 'calls': 0, 'message': 'Structured AI requires explicit --ai opt-in.', 'next': next_action, 'profiles': profiles}
-    settings = answer.settings('analysis')
+def override_settings(settings, provider=None, model=None, reasoning=None):
+    """Explicit provider / model / reasoning chosen on the command line over the configured analysis route."""
     if provider is not None:
         if provider not in answer.PROVIDERS:
             raise ValueError('Unknown explicit analysis provider')
@@ -271,6 +250,23 @@ def run_structured(con, paper_id, kind='both', allow_ai=False, max_chunks=1, pro
             settings[settings['provider']]['model'] = model
         if reasoning is not None:
             settings[settings['provider']]['reasoning'] = reasoning
+    return settings
+
+
+def run_structured(con, paper_id, kind='both', allow_ai=False, max_chunks=1, provider=None, model=None, reasoning=None):
+    """Explicit bounded profile work; never calls evidence analysis or an answer fallback."""
+    from . import structure, workflow
+    if kind not in ('overview', 'wh', 'protocol', 'both', 'all') or not isinstance(max_chunks, int) or not 1 <= max_chunks <= 20:
+        raise ValueError('Choose overview|wh|protocol|both|all and max_chunks from 1 to 20')
+    profiles = structure.completion(paper_id)
+    kinds = ('overview', 'wh', 'protocol') if kind == 'all' else ('wh', 'protocol') if kind == 'both' else (kind,)
+    needed = [k for k in kinds if not profiles[k]['ready']]
+    if not needed:
+        return {'status': 'complete', 'overall_complete': profiles['complete'], 'calls': 0, 'profiles': profiles, 'scientific_acceptance': 'not_assessed'}
+    next_action = 'Use structured-prepare/structured-submit, or explicitly configure ai.tasks.analysis and run structured-run <paper> --kind overview --ai --max-chunks 1.'
+    if not allow_ai:
+        return {'status': 'waiting', 'calls': 0, 'message': 'Structured AI requires explicit --ai opt-in.', 'next': next_action, 'profiles': profiles}
+    settings = override_settings(answer.settings('analysis'), provider, model, reasoning)
     if provider is None and not (settings.get('tasks') or {}).get('analysis'):
         return {'status': 'waiting', 'calls': 0, 'message': 'Configure ai.tasks.analysis explicitly; the answer route is not used.', 'next': next_action}
     provider = answer.provider_status(settings)

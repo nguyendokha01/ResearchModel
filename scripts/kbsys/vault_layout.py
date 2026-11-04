@@ -29,6 +29,7 @@ LEGACY_MOVES = [
 ]
 ROOT_MOVES = [("Chú giải graph.md", "_Maps/Chú giải graph.md"), ("Research map.md", "_Maps/Research map.md")]
 HUMAN_FOLDERS = ("My Ideas", "Open Questions", "Knowledge Gaps")
+MINE_INDEX_NOTES = ("Mine/Ideas/My Ideas.md", "Mine/Questions/Open Questions.md", "Mine/Knowledge Gaps/Knowledge Gaps.md")
 # Legacy machine indexes replaced by _Maps/Index (retired when untouched by a person).
 _RETIRED = re.compile(r"^(Research map\.md|Views/[^/]+\.md|Molecules/Molecules\.md|Species/Species\.md"
                       r"|Cell Types/Cell Types\.md|Topics/Topics\.md)$")
@@ -259,6 +260,39 @@ def retire(vault, path, kind, stamp):
     return target
 
 
+def mine_placeholder(title):
+    """The machine Mine/ index placeholder exactly as the old index writer left it (D-PENDING-4 inventory)."""
+    return f"---\ntags: [kb-index]\n---\n{notes.AUTO_START}\n{notes.INDEX_MARK}\n# {title}\n\n*Empty for now.*\n{notes.AUTO_END}\n"
+
+
+def retire_machine_files(vault, con, apply=False):
+    """G5 step 9 (D-PENDING-4/5): move the machine-only Mine/ index notes and the orphan, traced-but-uncropped images of
+    `vault` to knowledge_store/removed/ with retire() (one stamp, one undo map per kind; undo with `undo`). A Mine index
+    that differs in any byte from mine_placeholder() stays (kept_human_text). Dry run unless apply."""
+    from . import conform, image_audit
+    vdir = config.vault_dir(vault)
+    todo, kept = [], []
+    for rel in MINE_INDEX_NOTES:
+        path = vdir / rel
+        if path.is_file():
+            # Only the untouched placeholder of the 2026-10-22 inventory moves; any other text or property is the researcher's.
+            if path.read_text(encoding="utf-8") == mine_placeholder(path.stem):
+                todo.append((rel, "mine_index"))
+            else:
+                kept.append(rel)
+    for row in image_audit.audit(conform.Vault(vault, vdir, con), config.STORE / "papers"):
+        if (row["class"], row["cause"], row["part_crop_status"]) == ("orphan", "trace", "unavailable"):
+            todo.append((row["path"], "images"))
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out = []
+    for rel, kind in todo:
+        out.append({"kind": kind, "path": rel, "sha256": _sha(vdir / rel)})
+        if apply:
+            retire(vault, vdir / rel, kind, stamp)
+    maps = sorted({config.rel(config.STORE / "removed" / f"{k}_{stamp}" / f"{vault}.undo.json") for _, k in todo}) if apply else []
+    return {"vault": vault, "applied": bool(apply), "retire": out, "kept_human_text": kept, "undo_map": maps}
+
+
 def undo(map_path):
     """Move every file back exactly as recorded; never overwrite a file that reappeared."""
     data = json.loads(Path(map_path).read_text(encoding="utf-8"))
@@ -421,12 +455,10 @@ def _write_home(vdir, vault, mocs):
         if (vdir / folder / name).exists() or (vdir / folder / f"{name}.md").exists():
             return f"[[{name}|{label}]]" if label else f"[[{name}]]"
         return label or name
-    mine = " · ".join([link("My Ideas", folder="Mine/Ideas"), link("Open Questions", folder="Mine/Questions"),
-                       link("Knowledge Gaps", folder="Mine/Knowledge Gaps")]) + " · thư mục `Mine/Decisions/`"
+    mine = "thư mục `Mine/Ideas/` · `Mine/Questions/` · `Mine/Knowledge Gaps/` · `Mine/Decisions/` · folder `Mine/Hypotheses/`"
     bases = " · ".join(link(f"{name}.base", label, "_Bases") for name, label in (
         ("Papers", "Bài báo"), ("Substances", "Chất"), ("Methods", "Phương pháp"), ("Organisms", "Sinh vật"),
         ("Open conflicts", "Xung đột"), ("Review queue", "Cần duyệt")))
-    mine += " · folder `Mine/Hypotheses/`"
     content = "\n".join([
         "## Bắt đầu từ đây", "",
         "- [[Cần duyệt]] — **việc đang chờ bạn quyết định**: sai ở bài gốc, sai do AI chưa chắc cách sửa, bài mồ côi, nhận định không có nguồn",

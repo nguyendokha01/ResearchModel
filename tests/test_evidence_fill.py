@@ -141,6 +141,24 @@ class ValidateTests(unittest.TestCase):
                           "sentence_ids": ["S0002"], "statement": "Cells were counted in the group."}, SENTS)
         self.assertNotIn("filled_by", gone)
 
+    def test_ai_fill_provenance_is_kept_other_claims_are_not(self):  # G5: AI fills of stored units keep filled_by
+        ai = {"by": "ai", "source": "S0002"}
+        kept, *_ = check({"sentence_ids": ["S0002"], "statement": "Cells were counted in the group.",
+                          "outcome": {"direction": "not_applicable"}, "filled_by": {"direction": ai, "species": ai}}, SENTS)
+        self.assertEqual(kept["filled_by"], {"direction": ai})  # species is still empty: no provenance for an empty field
+        other, *_ = check({"sentence_ids": ["S0002"], "statement": "Cells were counted in the group.",
+                           "outcome": {"direction": "not_applicable"}, "filled_by": {"direction": {"by": "human"}}}, SENTS)
+        self.assertNotIn("filled_by", other)
+        uncited, *_ = check({"sentence_ids": ["S0002"], "statement": "Cells were counted in the group.", "outcome":
+                             {"direction": "not_applicable"}, "filled_by": {"direction": {**ai, "source": "S0001"}}}, SENTS)
+        self.assertNotIn("filled_by", uncited)  # a source the unit does not cite is no provenance (review-fix 06998e0)
+        ai = {**ai, "analyst": "claude/sonnet"}  # the G5 shape survives export -> submit (submission_from)
+        first, *_ = check({"sentence_ids": ["S0002"], "statement": "Cells were counted in the group.",
+                           "outcome": {"direction": "not_applicable"}, "filled_by": {"direction": ai}}, SENTS)
+        sub = evidence.submission_from("p", {}, [{**first, "unit_id": "p:E0001", "sentence_ids": ["p:S0002"]}])
+        again, *_ = check(sub["units"][0], SENTS)
+        self.assertEqual(again["filled_by"], {"direction": ai})
+
 
 class BundledFindingTests(unittest.TestCase):
     ROWS = [sent(1, "Survival increased in group A but decreased in group B.")]

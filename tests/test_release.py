@@ -90,6 +90,16 @@ class ReleaseTests(unittest.TestCase):
         self.assertNotIn("private dev rules", out)  # the dev section is the last one in AGENTS.md
         self.assertNotIn("docs/DECISIONS.md", package.PRIVATE_DOC_LINE.sub("", "keep\nsee docs/DECISIONS.md\n"))
 
+    def test_release_ships_the_domain_profiles(self):
+        for name in ("biomedical", "generic"):
+            self.put(f"config/domain/{name}.yaml", "use_mesh: true\nspecies: {}\n")
+        with tempfile.TemporaryDirectory() as temp:
+            dest = Path(temp) / "release"
+            result = package.release(dest)
+            shipped = set((dest / ".release_files").read_text(encoding="utf-8").split())
+            self.assertLessEqual({"config/domain/biomedical.yaml", "config/domain/generic.yaml"}, shipped)
+            self.assertFalse([leak for leak in result["leaks"] if "domain" in leak])
+
     def test_release_root_has_exactly_two_bat_files_and_no_dev_only_file(self):
         bats = ["1 - Mo trang chinh.bat", "2 - Ket noi AI (MCP).bat", "3 - Dong goi chia se.bat", "5 - Kiem tra demo3.bat"]
         never = ["tools/run.py", "tools/verify.py", "tools/accept_revision.py", "tests/test_accept_revision.py", "scripts/ui.py",

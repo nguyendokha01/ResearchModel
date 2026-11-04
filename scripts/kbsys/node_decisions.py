@@ -120,7 +120,8 @@ def _row_errors(r, ctx, stored):
         others = [k for k in members if k != r["key"]]
         errs.append(f"key is one of several terms of node {record['name']!r} (other keys: {', '.join(others)}): the build would split "
                     "the node under a new id, not remove it, and a row per key is refused the same way; edit the node's terms/synonyms instead")
-    synonyms = [] if kind == "add" or record is None else record.get("synonyms") or []
+    # a stored not_a_node row has removed its node (and its synonyms): match the name's singular/plural forms instead
+    synonyms = [] if kind == "add" else record.get("synonyms") or [] if record is not None else concepts.spelling_variants(name)
     for sid in ids:
         row, in_vault = _sentence(sid, con, papers)
         if row is None:

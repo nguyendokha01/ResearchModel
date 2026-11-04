@@ -36,7 +36,7 @@ def folder_name(text):
 def create_vault(con, name, topic=""):
     typed = (name or "").strip()
     name = folder_name(typed)
-    if not NAME.fullmatch(name):
+    if not config.is_research_vault_name(name):   # also "Registry" (mother vault) and "" (from "..")
         raise ValueError("Hãy gõ tên vault (chữ, số, _ hoặc -; dấu tiếng Việt sẽ được bỏ trong tên thư mục)")
     folder = config.vault_dir(name)
     if folder.exists():

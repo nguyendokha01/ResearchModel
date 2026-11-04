@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
-from kbsys import analysis_transport, config, db, figure_reading, media, node_cards, workflow, answer
+from kbsys import analysis_runner, analysis_transport, config, db, figure_reading, media, node_cards, workflow, answer
 from . import test_figure_reading
 from . import test_node_cards
 import os
@@ -160,6 +160,41 @@ class NodeRunnerTests(test_node_cards.NodeCardTests):
         self.assertIn(True, [busy for _name, busy in seen["writes"]])  # card write held `library`
         self.assertFalse(busy_elsewhere())  # and released afterwards
 
+    def test_each_call_is_logged_to_ai_usage_log(self):
+        raw = json.dumps(self.good_reply(self.task()))
+        usage = {"input_tokens": 11, "output_tokens": 7}
+        with patch.object(answer, "_chat", return_value=(raw, usage)):
+            self.assertTrue(node_cards.run(self.con, "v", "EG", provider="codex_cli")["ok"])
+        rows = list(db.read_jsonl(config.LOGS_DIR / "ai_usage.jsonl"))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual((rows[0]["stage"], rows[0]["provider"], rows[0]["status"]), ("node_card", "codex_cli", "returned"))
+        self.assertEqual(rows[0]["usage"], usage)
+        self.assertEqual(set(rows[0]), {"time", "provider", "model", "stage", "input_chars", "request_sha256",
+                                        "concept_id", "output_chars", "usage", "provider_usage", "status",
+                                        "elapsed_seconds"})  # contract shape: no prompt text, no key
+        report = analysis_runner.usage_report()
+        self.assertEqual((report["calls"], report["calls_by_stage"]), (1, {"node_card": 1}))
+
+    def test_interrupted_call_still_logs_a_failed_row(self):
+        log = Path(self.temp.name) / "logs" / "interrupt.jsonl"
+        with self.assertRaises(KeyboardInterrupt):
+            analysis_transport.logged_call(lambda *_a: (_ for _ in ()).throw(KeyboardInterrupt()), log, "node_card",
+                                           {"provider": "codex_cli"}, "s", "u")
+        row = list(db.read_jsonl(log))[0]
+        self.assertEqual((row["status"], row["error"], row["usage"]), ("failed", "KeyboardInterrupt", {}))
+
+    def test_failed_call_is_logged_and_log_write_error_does_not_fail_run(self):
+        with patch.object(answer, "_chat", side_effect=RuntimeError("boom")):
+            self.assertEqual(node_cards.run(self.con, "v", "EG", provider="codex_cli")["status"], "failed")
+        row = list(db.read_jsonl(config.LOGS_DIR / "ai_usage.jsonl"))[0]
+        self.assertEqual((row["status"], row["error"], row["usage"]), ("failed", "RuntimeError", {}))
+        blocker = Path(self.temp.name) / "not_a_dir"
+        blocker.write_text("x", encoding="utf-8")
+        raw = json.dumps(self.good_reply(self.task()))
+        with patch.object(answer, "_chat", return_value=(raw, {})), \
+                patch.object(config, "LOGS_DIR", blocker / "logs"):  # mkdir fails -> OSError, reported only
+            self.assertTrue(node_cards.run(self.con, "v", "EG", provider="codex_cli")["ok"])  # a good card still saves
+
     def test_timeout_is_not_repaired_or_submitted(self):
         with patch.object(analysis_transport, "call",
                           side_effect=answer.ProviderTimeout("command", 1)) as call, \
@@ -222,6 +257,16 @@ class FigureRunnerTests(test_figure_reading.FigureReadingTests):
             result = figure_reading.run("paper", object_id, provider="anthropic")
         self.assertTrue(result["ok"])
         self.assertEqual(call.call_args.kwargs["image_paths"], [crop])
+
+    def test_call_is_logged_to_the_paper_usage_log(self):
+        _folder, object_id, _crop = self.add_paper("paper")
+        usage = {"input_tokens": 5, "output_tokens": 3}
+        with patch.object(analysis_transport, "call", return_value=(json.dumps(self.reply()), usage)):
+            self.assertTrue(figure_reading.run("paper", object_id, provider="anthropic")["ok"])
+        rows = list(db.read_jsonl(db.paper_dir("paper") / "analysis_usage.jsonl"))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual((rows[0]["stage"], rows[0]["status"], rows[0]["usage"]), ("figure_reading", "returned", usage))
+        self.assertEqual(analysis_runner.usage_report("paper")["calls_by_stage"], {"figure_reading": 1})
 
     def test_hash_mismatch_refuses_to_send_image(self):
         _folder, object_id, crop = self.add_paper("paper")

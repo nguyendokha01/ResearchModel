@@ -62,7 +62,7 @@ class Fragments(unittest.TestCase):
         self.assertEqual(found("CH-04", paper), [])
 
     def test_keyword_list_passage_without_a_final_stop_is_not_cut(self):
-        text = "Key words: Mesenchymal stem cells (MSCs); Pluripotent stem cells; Muse cells; Stroke"
+        text = "Key words: Example stem cells (ESCs); Model tissue; Test cells; Sample injury"
         paper = Paper("p", passages=[cases.passage(1, text)], sentences=[sent(1, text)])
         self.assertEqual(found("CH-04", paper), [])
         paper = Paper("p", passages=[cases.passage(1, cases.CUT)], sentences=[sent(1, cases.CUT)])

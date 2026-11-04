@@ -20,7 +20,6 @@ from .conform import check
 
 SOURCE_STATUSES = ("active", "archived", "external", "unavailable")  # db.py source_files.status
 OFF_DISK = ("archived", "external", "unavailable")  # statuses that need no path on this machine
-TEXT_SUFFIXES = {".md", ".json", ".jsonl", ".yaml", ".yml", ".py"}
 REPO_DIRS = ("scripts", "tests", "config", "docs", "tools", ".claude")
 
 
@@ -322,7 +321,7 @@ def only_lf(store, root=None):
 
     def files(base, recurse):
         return [p for p in sorted(base.rglob("*") if recurse else base.glob("*"))
-                if p.is_file() and p.suffix.lower() in TEXT_SUFFIXES]
+                if p.is_file() and p.suffix.lower() in db.TEXT_SUFFIXES]
     for p in files(store.root, False):
         if has_cr(p):
             yield f"store file {p.name} has a carriage return"

@@ -29,7 +29,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from kbsys import answer, config, db, discovery, find, graph, library, manage, mesh, overlap, vectors, neural, structure, workflow, results  # noqa: E402
+from kbsys import answer, config, db, discovery, domain, find, graph, library, manage, mesh, overlap, vectors, neural, structure, workflow, results  # noqa: E402
 MAX_UPLOAD = 300 * 1024 * 1024  # one PDF/ZIP per request
 from kbsys.db import paper_dir  # noqa: E402
 
@@ -552,7 +552,7 @@ def prepare(say=print):
     Safe to run at every start: nothing is redone for papers that did not change."""
     PREP["running"] = True
     try:
-        if not mesh.available():
+        if domain.profile()["use_mesh"] and not mesh.available():
             say("Đang tải từ điển MeSH (NLM, ~17 MB) và dựng chỉ mục… (chỉ lần đầu)")
             info = mesh.build(mesh.download())
             say(f"  MeSH: {info['descriptors']} đề mục, {info['terms']} thuật ngữ")

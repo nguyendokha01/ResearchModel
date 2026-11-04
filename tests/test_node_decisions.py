@@ -96,7 +96,8 @@ class NodeDecisionTests(unittest.TestCase):
 
 
 SENTENCES = [("S0001", "intro", "We used the Foo cell line."), ("S0002", "references", "Foo cell reference."),
-             ("S0003", "intro", "Nothing relevant here."), ("S0004", "results", "A Bar assay and Gate added were used.")]
+             ("S0003", "intro", "Nothing relevant here."), ("S0004", "results", "A Bar assay and Gate added were used."),
+             ("S0005", "methods", "Several Bar assays were run.")]
 
 
 class WriterTests(unittest.TestCase):
@@ -260,6 +261,11 @@ class WriterTests(unittest.TestCase):
         self.assertEqual(node_decisions.submit(file, self.con, self.registry())[0], [])
         for kind, value in (("type", "cell_type"), ("no_mesh", None), ("not_a_node", None), ("add", "method")):  # add/not_a_node raised TypeError
             self.assertIn("key is not", self.submit([{**row("Foo cell", kind, value, sentence_ids=["p1:S0001"]), "key": ["x"]}])[0][2])
+
+    def test_check_matches_a_removed_node_by_its_plural(self):  # G5: "sterile techniques" failed check after the node was removed
+        self.assertEqual(self.submit([row("Bar assay", "not_a_node", sentence_ids=["p1:S0005"])]), [])
+        self.assertIsNone(self.registry().lookup("Bar assay"))
+        self.assertEqual(node_decisions.check(self.con, self.registry()), [])
 
     def test_check_flags_a_vanished_sentence(self):
         self.assertEqual(self.submit([row("Foo cell", "type", "cell_type", sentence_ids=["p1:S0001"])]), [])

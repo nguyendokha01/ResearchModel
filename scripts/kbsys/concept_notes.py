@@ -1022,7 +1022,7 @@ def _model_text(value):
     return " ".join(str(value or "").split())
 
 
-_CANONICAL_LINK = re.compile(r"\[\[([^\]|#^]+)([#^][^\]|]*)?(?:\|([^\]]+))?\]\]")
+_CANONICAL_LINK = re.compile(r"\[\[([^\]|#^]+?)([#^][^\]|]*)?(?:(\\?)\|([^\]]+))?\]\]")  # (\\?): a table-escaped alias bar
 
 
 def _canonical_note_links(text, registry):
@@ -1031,14 +1031,14 @@ def _canonical_note_links(text, registry):
         return text
 
     def replace(match):
-        target, suffix, alias = match.groups()
+        target, suffix, escape, alias = match.groups()
         record = registry.lookup(target)
         if not record:
             return match.group(0)
         canonical = notes.safe_filename(concepts._display_name(record.get("name") or target))
         rendered = f"[[{canonical}{suffix or ''}"
         if alias is not None:
-            rendered += f"|{alias}"
+            rendered += f"{escape}|{alias}"
         return rendered + "]]"
 
     return _CANONICAL_LINK.sub(replace, text)

@@ -6,6 +6,7 @@ time with `kb.py rebuild-db` (review items and batch history live only here).
 """
 
 import json
+import os
 import sqlite3
 
 from . import config
@@ -313,6 +314,50 @@ def write_jsonl(path, rows):
     tmp.replace(path)
 
 
+TEXT_SUFFIXES = {".md", ".json", ".jsonl", ".yaml", ".yml", ".py"}  # CHR-03: written with LF only
+
+
+def _parsed(suffix, raw):
+    text = raw.decode("utf-8-sig")
+    if suffix == ".json":
+        return json.loads(text)
+    if suffix == ".jsonl":
+        return [json.loads(line) for line in text.splitlines() if line.strip()]
+    return text.replace("\r\n", "\n")
+
+
+def store_lf(apply=False):
+    """CHR-03: store text files (store root, papers/**, history copies included) that older code wrote with CRLF, as LF.
+    A file is rewritten only when CRLF -> LF leaves no CR and its JSON / JSONL content is identical; otherwise it is
+    left as it is and reported. Dry run unless apply. Returns {"files", "refused", "applied"}."""
+    paths = [p for p in config.STORE.glob("*") if p.is_file()] + \
+            ([p for p in config.PAPERS_DIR.rglob("*") if p.is_file()] if config.PAPERS_DIR.is_dir() else [])
+    files, refused = [], []
+    for path in sorted(paths):
+        if path.suffix.lower() not in TEXT_SUFFIXES:
+            continue
+        raw = path.read_bytes()
+        if b"\r" not in raw:
+            continue
+        new = raw.replace(b"\r\n", b"\n")
+        name = path.relative_to(config.STORE).as_posix()
+        try:
+            same = b"\r" not in new and _parsed(path.suffix.lower(), raw) == _parsed(path.suffix.lower(), new)
+        except ValueError as err:  # UnicodeDecodeError and JSONDecodeError included
+            same, name = False, f"{name} ({type(err).__name__})"
+        if not same:
+            refused.append(name)
+            continue
+        if apply:
+            st = path.stat()
+            tmp = path.with_suffix(path.suffix + ".tmp")
+            tmp.write_bytes(new)
+            tmp.replace(path)
+            os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns))  # analysis_runner compares checkpoint/reply mtimes
+        files.append(name)
+    return {"files": files, "refused": refused, "applied": apply}
+
+
 # Tables whose rows all belong to one paper (and are rebuilt from its files).
 PAPER_TABLES = ("papers", "source_files", "paper_vaults", "sections", "passages", "claims", "paper_terms",
                 "concept_links", "sentences", "references_list", "citations", "figures_tables", "evidence")
@@ -453,6 +498,8 @@ def rebuild(con):
                 con.commit()
                 count += 1
     # concept_links is a derived library index, rebuilt after all paper files are loaded.
-    from . import concepts
+    from . import concepts, sources_misc
     concepts.rebuild_links(con)
+    sources_misc.index_sources(con)  # imported sources too, so their FTS table takes the current tokenizer (CHR-04)
+    con.commit()
     return count

@@ -6,6 +6,7 @@
 .gitattributes text eol=lf
 .editorconfig text eol=lf
 *.json text eol=lf
+*.jsonl text eol=lf
 *.yaml text eol=lf
 *.js text eol=lf
 *.css text eol=lf
@@ -15,3 +16,4 @@
 *.docx binary
 *.pdf binary
 *.zip binary
+*.yml text eol=lf

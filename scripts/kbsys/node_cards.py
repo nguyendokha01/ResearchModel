@@ -980,7 +980,9 @@ def run(con, vault, name, provider=None, model=None, reasoning=None, max_attempt
             saved_path, saved = None, None
         else:
             try:
-                raw, usage = analysis_transport.call(settings, system, _run_user(payload, previous, problems))
+                raw, usage = analysis_transport.logged_call(
+                    analysis_transport.call, config.LOGS_DIR / "ai_usage.jsonl", "node_card", settings, system,
+                    _run_user(payload, previous, problems), extra={"concept_id": concept_id})
             except answer.ProviderTimeout as exc:
                 return {"status": "provider_timeout", "attempts": attempts, "tokens": usage_total,
                         "provider": exc.provider, "timeout": exc.timeout, "error": str(exc),

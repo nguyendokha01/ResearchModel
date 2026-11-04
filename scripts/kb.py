@@ -17,7 +17,7 @@ from kbsys import (analysis, concept_notes, concepts, config, db, discovery, evi
                    mother_vault, notes, refmanager, relations, search, selftest, source_notes, tier1)  # noqa: E402
 from kbsys.notes import section_label  # noqa: E402
 from kbsys.answer import AIError  # noqa: E402
-from kbsys import conform, gaps, neural, overlap, pipeline, standard, structure, vault_layout, workflow  # noqa: E402
+from kbsys import answer, conform, gaps, library, neural, overlap, pipeline, standard, structure, vault_layout, workflow  # noqa: E402
 
 
 def _out_json(data):
@@ -326,6 +326,23 @@ def cmd_export_analysis(args, cfg, con):
     print("\n".join(evidence.repair_report(args.paper_id)))
 
 
+def cmd_export_docx(args, cfg, con):
+    """Write one vault note as a Word file with its figure images (reads the vault only)."""
+    from kbsys import docx_export
+    out, images = docx_export.export(args.vault or config.default_vault(cfg), args.note, args.out)
+    print(f"wrote {out} ({out.stat().st_size} bytes, {images} images)")
+
+
+def cmd_canvas(args, cfg, con):
+    """Write the walk of one node as an Obsidian Canvas in <vault>/Canvas/ (never over a canvas without our marker)."""
+    from kbsys import canvas
+    try:
+        out, message = canvas.write(con, args.vault or config.default_vault(cfg), args.node, args.limit)
+    except RuntimeError as error:  # the vault index is not ready: no answer, not "not found"
+        sys.exit(str(error))
+    print(f"wrote {out}" + (f"; {message}" if message else "") if out else message)
+
+
 def cmd_crosscheck_analysis(args, cfg, con):
     from kbsys import crosscheck
     if args.all:
@@ -442,6 +459,41 @@ def cmd_release(args, cfg, con):
     _out_json({**result, "leaks": result["leaks"][:200], "leak_count": len(result["leaks"])})
     if result["leaks"]:
         sys.exit(2)
+
+
+def cmd_ai_check(args, cfg, con):
+    _out_json(answer.ai_check(args.call))
+
+
+def cmd_ai_bench(args, cfg, con):
+    from kbsys import bench
+    if not args.ai:
+        print("ai-bench gọi AI khoảng 4-8 lần trên 2 bài mẫu tự tạo (không dùng bài của bạn). Thêm --ai để chạy thật.")
+        return
+    result = bench.run(args.provider, args.model)
+    if args.out:
+        Path(args.out).write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+    _out_json(result)
+    print(bench.summary_vi(result), file=sys.stderr)
+
+
+def cmd_init(args, cfg, con):
+    """First run, safe to repeat: folders, database, optional vault. Nothing existing is overwritten."""
+    created, existing = [], []
+    for path in (config.STORE, config.PAPERS_DIR, config.LOGS_DIR, config.CACHE_DIR, config.VAULTS_DIR, config.REVIEW_PENDING,
+                 config.ROOT / "sources" / "inbox"):
+        (existing if (args.store_existed if path == config.STORE else path.is_dir()) else created).append(config.rel(path))
+        path.mkdir(parents=True, exist_ok=True)
+    (existing if args.db_existed else created).append(config.rel(config.DB_PATH))   # db.connect() made it before this command ran
+    vault = None
+    if args.vault:
+        name = library.folder_name(args.vault)
+        if name in library.list_vaults():
+            vault = {"vault": name, "status": "existing"}
+        else:
+            vault = {**library.create_vault(con, args.vault, args.topic or ""), "status": "created"}
+    _out_json({"created": created, "existing": existing, "vault": vault, "ai": answer.ai_check(),
+               "next": ['Mở "1 - Mo trang chinh.bat" (trang tìm kiếm).', 'Nối ứng dụng AI bằng "2 - Ket noi AI (MCP).bat".']})
 
 
 def cmd_mcp_config(args, cfg, con):
@@ -622,6 +674,12 @@ def cmd_image_audit(args, cfg, con):
     print(image_audit.summary(image_audit.run(vaults, config.STORE / "papers", args.out)))
 
 
+def cmd_retire_machine_files(args, cfg, con):
+    if not config.vault_dir(args.vault).is_dir():
+        raise ValueError(f"Unknown vault: {args.vault!r}")
+    _out_json(vault_layout.retire_machine_files(args.vault, con, args.apply))
+
+
 def cmd_tidy_vault(args, cfg, con):
     vault = args.vault or config.default_vault(cfg)
     if not vault:
@@ -657,6 +715,10 @@ def cmd_node_decision(args, cfg, con):
 def cmd_rebuild(args, cfg, con):
     print(f"Rebuilt the database from {db.rebuild(con)} paper folders.")
     _out_json(ghosts.rebuild(con))
+
+
+def cmd_store_lf(args, cfg, con):
+    _out_json(db.store_lf(args.apply))
 
 
 def cmd_rebuild_ghosts(args, cfg, con):
@@ -729,6 +791,11 @@ def cmd_demo3(args, cfg, con):
     if args.command == 'steps':
         _out_json(workflow.status() if args.status else pipeline.run(con, cfg, vault, args.step, limit=args.limit,
                                                                    structured_ai=args.structured_ai, structured_max_chunks=args.max_chunks))
+    elif args.command == 'run-all':
+        report = pipeline.run_all(con, cfg, vault, ai=args.ai, until=args.until)
+        _out_json(report)
+        if report.get('failed'):
+            sys.exit(1)
     elif args.command == 'build-media':
         _out_json(pipeline.build_media(args.paper_id, args.regions))
     elif args.command == 'media-status':
@@ -779,6 +846,11 @@ def main():
     p.add_argument('--status', action='store_true')
     p.add_argument('--structured-ai', action='store_true', help='explicitly run bounded structured input AI before evidence')
     p.add_argument('--max-chunks', type=int, default=1)
+    p.set_defaults(func=cmd_demo3)
+    p = sub.add_parser('run-all', help='G6: snapshot (runtime/research-workspace, one copy per run), then every stage in order (ingest takes sources/inbox; analyze only with --ai); reports Mine/ changes')
+    p.add_argument('--vault')
+    p.add_argument('--ai', action='store_true', help='also run the analyze stage (calls the configured AI provider)')
+    p.add_argument('--until', choices=pipeline.STEPS, help='stop after this stage')
     p.set_defaults(func=cmd_demo3)
     p = sub.add_parser('build-media', help='build one paper source-region inventory without source re-extraction')
     p.add_argument('paper_id')
@@ -941,6 +1013,18 @@ def main():
     p.add_argument("--out", help="default: runtime/ai-repair/<id>.submit.json")
     p.set_defaults(func=cmd_export_analysis)
 
+    p = sub.add_parser("export-docx", help="write one vault note as a Word file with its figure images (default runtime/exports/<note>.docx)")
+    p.add_argument("note", help="path inside the vault (Concepts/X.md) or a note name")
+    p.add_argument("--vault", help="default: the selected vault")
+    p.add_argument("--out", help="default: runtime/exports/<note name>.docx; an existing file is never overwritten (_1, _2)")
+    p.set_defaults(func=cmd_export_docx)
+
+    p = sub.add_parser("canvas", help="write one node, its typed neighbours and their links as an Obsidian Canvas (<vault>/Canvas/<node>.canvas)")
+    p.add_argument("node", help="node note name or path inside the vault")
+    p.add_argument("--vault", help="default: the selected vault")
+    p.add_argument("--limit", type=int, default=20, help="neighbour steps, 1-100 (default 20)")
+    p.set_defaults(func=cmd_canvas)
+
     p = sub.add_parser("crosscheck-analysis", help="independent V13 statement/quote review (Codex CLI)")
     p.add_argument("paper_id", nargs="?")
     p.add_argument("--all", action="store_true")
@@ -954,8 +1038,9 @@ def main():
 
     sub.add_parser("analysis-guide", help="print the rules for analysing a paper (v2)").set_defaults(
         func=cmd_analysis_guide)
-    p = sub.add_parser("analysis-usage", help="local recorded analysis token usage (no AI calls)")
-    p.add_argument("paper_id")
+    p = sub.add_parser("analysis-usage", help="local recorded AI token usage of a paper, or of node cards when no "
+                                              "paper_id is given (no AI calls)")
+    p.add_argument("paper_id", nargs="?")
     p.set_defaults(func=cmd_analysis_usage)
     p = sub.add_parser("quality-check", help="offline font/encoding/OCR preflight before AI analysis")
     group = p.add_mutually_exclusive_group(required=True)
@@ -990,6 +1075,22 @@ def main():
     p = sub.add_parser("release", help="copy the shareable software into a separate git folder and scan it for private traces")
     p.add_argument("dest", help="release folder outside the project, e.g. ../my_release")
     p.set_defaults(func=cmd_release)
+
+    p = sub.add_parser("ai-check", help="read-only: provider and readiness of every AI task (key only present/missing); --call sends one tiny prompt to each ready provider")
+    p.add_argument("--call", action="store_true", help="really call each ready provider once (nothing is sent without it)")
+    p.set_defaults(func=cmd_ai_check)
+
+    p = sub.add_parser("ai-bench", help="score an AI on a fixed synthetic task set (OD-13); calls the AI only with --ai; the real store is never opened")
+    p.add_argument("--provider", help="provider to score (default: the ai.tasks.analysis route)")
+    p.add_argument("--model", help="model name for that provider")
+    p.add_argument("--out", help="also write the JSON result to this file")
+    p.add_argument("--ai", action="store_true", help="really call the provider (nothing is sent without it)")
+    p.set_defaults(func=cmd_ai_bench)
+
+    p = sub.add_parser("init", help="first run, safe to repeat: store folders, database, optional first vault; prints the AI check and next steps")
+    p.add_argument("--vault", help="also create this vault if it does not exist")
+    p.add_argument("--topic", help="text for the new vault's Home note")
+    p.set_defaults(func=cmd_init)
 
     p = sub.add_parser("mcp-config", help="print MCP connection settings for AI apps (Claude, Codex, Gemini, Cursor)")
     p.add_argument("--install", choices=["claude-desktop", "codex", "gemini-cli", "cursor"],
@@ -1113,7 +1214,14 @@ def main():
     p.add_argument("--out", help="preview: the Markdown report (default runtime/g4-4/node_preview.md)")
     p.set_defaults(func=cmd_node_decision)
 
+    p = sub.add_parser("retire-machine-files", help="G5: move machine-only Mine/ index notes and orphan traced images to knowledge_store/removed/ (dry run unless --apply; undo with vault-migrate --undo)")
+    p.add_argument("--vault", required=True)
+    p.add_argument("--apply", action="store_true")
+    p.set_defaults(func=cmd_retire_machine_files)
     sub.add_parser("rebuild-db", help="rebuild library.db from knowledge_store/papers/").set_defaults(func=cmd_rebuild)
+    p = sub.add_parser("store-lf", help="CHR-03: store text files written with CRLF -> LF (content checked; dry run unless --apply)")
+    p.add_argument("--apply", action="store_true")
+    p.set_defaults(func=cmd_store_lf)
     sub.add_parser("status", help="counts").set_defaults(func=cmd_status)
 
     p = sub.add_parser("refresh-review-policy", help="preview or apply source-grounded relevance and exact evidence dedup; archives machine records")
@@ -1156,19 +1264,23 @@ def main():
     if args.command == "enrich-interventions" and not (args.all or args.paper_id):
         args.all = True
     cfg = config.load()
-    con = db.connect()
+    args.db_existed = config.DB_PATH.is_file()
+    args.store_existed = config.STORE.is_dir()  # db.connect() below creates it; init reports what it found
+    con = None if args.command == 'ai-bench' else db.connect()  # the bench works in its own temp store
     try:
         from contextlib import nullcontext
         readonly = {'mcp', 'tool', 'status', 'paper', 'search', 'sentences', 'read-paper', 'ref', 'get-context',
                     'analysis-status', 'analysis-guide', 'review-list', 'section-profile', 'neural-search',
-                    'neural-prepare', 'neural-check', 'compare-protocols', 'mcp-config', 'selftest', 'conform', 'analysis-usage',
-                    'media-status', 'structured-status', 'export-analysis', 'image-audit',
+                    'neural-prepare', 'neural-check', 'compare-protocols', 'mcp-config', 'ai-check', 'ai-bench', 'selftest', 'conform', 'analysis-usage',
+                    'media-status', 'structured-status', 'export-analysis', 'export-docx', 'image-audit',
                     'reextract' if args.command == 'reextract' and args.dry_run else '__never__',
                     'gaps' if args.command == 'gaps' and args.dry_run else '__never__',
+                    'store-lf' if args.command == 'store-lf' and not args.apply else '__never__',
+                    'retire-machine-files' if args.command == 'retire-machine-files' and not args.apply else '__never__',
                     'node-decision' if args.command == 'node-decision' and args.action in ('check', 'preview') else '__never__',
                     # these take the `library` writer lock themselves, only around store writes, so a slow AI
                     # call never blocks other writers (`steps` locks per stage inside pipeline.run)
-                    'node-card', 'figure-reading', 'analyze', 'structured-run', 'steps'}
+                    'node-card', 'figure-reading', 'analyze', 'structured-run', 'steps', 'run-all'}
         with nullcontext() if args.command in readonly else workflow.writer_lock():
             args.func(args, cfg, con)
     except AIError as error:  # e.g. no AI chosen: a clear sentence, not a traceback
@@ -1176,7 +1288,8 @@ def main():
     except ValueError as error:  # a wrong ID, choice or state: one line for the researcher
         sys.exit(f"Error: {error}")
     finally:
-        con.close()
+        if con:
+            con.close()
 
 
 if __name__ == "__main__":

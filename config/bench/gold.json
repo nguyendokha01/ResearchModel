@@ -1,0 +1,32 @@
+{
+ "note": "Synthetic bench papers (invented compounds and numbers). Sentence ids are the numbers after S in each paper.",
+ "papers": {
+  "bench2026_kelmorin_a1b2": {
+   "results": {
+    "S0004": "increase",
+    "S0005": "decrease",
+    "S0006": "no_change",
+    "S0007": "decrease"
+   },
+   "hedged": [
+    "S0007"
+   ]
+  },
+  "bench2026_aldoran_c3d4": {
+   "results": {
+    "S0004": "increase",
+    "S0005": "no_change",
+    "S0006": "increase",
+    "S0007": "decrease"
+   },
+   "hedged": [
+    "S0006",
+    "S0007"
+   ]
+  }
+ },
+ "questions": {
+  "answerable": "Did Kelmorin improve the viability of rat kidney slices after cold storage?",
+  "trap": "Kelmorin clearly lowered the water content of rat kidney slices. By how much did it lower it?"
+ }
+}

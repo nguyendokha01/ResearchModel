@@ -40,6 +40,7 @@ kb.py list [--pending] [--vault V] [--json]    kb.py status
 (`quality: ok`); otherwise open the crop `knowledge_store/papers/<id>/crops/T<n>.jpg`. A citation with
 `confidence: "low"` is ambiguous: say so, never pick a candidate. OCR numbers need PDF verification.
 Maintenance: `reextract <paper_id>|--all [--dry-run]` (no AI; dry-run first, one paper at a time),
+`store-lf [--apply]` (CHR-03: CRLF store files -> LF, content-checked),
 `attach-supplement <paper_id> <file>`. Supplement files in a batch are attached automatically when the name carries
 `supp`/`SI`/`S1`/`mmc1`… and the paper matches by DOI or unique parent name. **`kb.py selftest` must pass before commits
 that touch data formats.**
@@ -106,11 +107,13 @@ kb.py analysis-guide                       kb.py list --pending --vault V
 kb.py read-paper <id> --compact            kb.py ref <id> <n>
 kb.py submit-analysis <id> [file.json]     # default file: knowledge_store/papers/<id>/analysis_v2.draft.json; exit 2 while needs_fix
 kb.py submit-analysis <id> <file> --dry-run   # same checks, nothing stored (~30–60 s); exit 2 while errors or coverage_missing remain
-kb.py analysis-status <id>                 kb.py analysis-usage <id>       # recorded provider usage only
+kb.py analysis-status <id>                 kb.py analysis-usage [<id>]     # recorded provider usage only; no id = node cards
 kb.py analyze --vault V [--limit N]        # configured provider (ai.tasks.analysis), one paper at a time; costs quota: ask first
 kb.py recheck-analysis <id>|--all          # re-run current checks, no AI, never removes stored units
 kb.py fill-evidence-fields [--paper ID] [--apply]   # EV-17: fill empty direction/species of stored result units by rule (sets `filled_by`); DEFAULT = dry run: per-paper counts, predicted empty shares vs the 5 % limits, 5 samples, writes nothing; --apply rewrites evidence.jsonl (researcher/G5 only)
 kb.py export-analysis <id> [--out file]    # stored analysis -> COMPLETE submission file (default runtime/ai-repair/<id>.submit.json) + repair report (flagged/drifted units, best new sentences, uncovered, errors); reads only
+kb.py export-docx <note> [--vault V] [--out f.docx]   # one vault note (path or name) -> Word file with its figure images (zipfile, no new package); default runtime/exports/<note>.docx, never overwrites (_1, _2); an --out inside vaults/ or knowledge_store/ is refused (no writer lock); reads the vault only
+kb.py canvas <node> [--vault V] [--limit N]   # the walk of one node as an Obsidian Canvas in <vault>/Canvas/ (centre, neighbours, one labelled edge per step); rewrites only its own untouched canvas of this node (`kb_machine` = sha256 of nodes+edges, first node = this node), else the next free _1, _2 and says "kept"; a cut walk prints "N of M steps shown"; a Canvas junction out of the vault is refused; writes the vault, takes the writer lock
 # submit-analysis refreshes only the paper note and the concept notes this paper can change (its concepts + parents);
 # retiring orphaned concept notes is left to `kb.py notes --vault V`.
 kb.py reset-analysis <id>|--all [--reason …]    # researcher's decision only; moves files to analysis_history/removed_<time>/
@@ -124,6 +127,10 @@ MCP equivalents are listed in `docs/CONTRACTS.md` section 10. Build in small ste
 ```
 kb.py steps --status                                  # durable stage status
 kb.py steps <ingest|quality|structure|analyze|connect|vectors|notes> --vault V [--limit N] [--structured-ai] [--max-chunks N]
+kb.py ai-check [--call]                              # provider + ready per AI task, key only present/missing; --call sends one tiny prompt to each ready provider
+kb.py ai-bench [--provider P] [--model M] [--out FILE] --ai  # score an AI on 2 synthetic papers + 2 questions (OD-13) in a temp store; without --ai it only says what it would do
+kb.py init [--vault NAME --topic TEXT]                # first run, safe to repeat: folders, database, optional vault, AI summary, next steps
+kb.py run-all --vault V [--ai] [--until STAGE]          # snapshot, all stages in order (analyze needs --ai), Mine/ hash check; exit 1 on a failed stage
 kb.py structure <paper_id> [--read-only]              # code-only section/acronym/protocol inventory
 kb.py section-profile <id>       kb.py submit-section-profile <id> <reply.json> --analyst <name>
 kb.py protocol-profile <id>      kb.py submit-protocol-profile <id> <reply.json> --analyst <name>
@@ -168,6 +175,7 @@ kb.py concept-notes [--vault V] [--concept-id C] [--revalidate]     # --revalida
 kb.py notes --vault V                    # paper notes, concept notes, source notes, indexes, mother vault (offline)
 kb.py vault-migrate --vault V [--dry-run|--undo MAP]    kb.py mother-vault     kb.py tidy-vault V [--dry-run]
 kb.py graph-colours [vault...]           # back up graph.json + legend, re-merge colour groups (no notes rebuild), check VN-09
+kb.py retire-machine-files --vault V [--apply]    # G5: machine-only Mine/ index notes + orphan traced images -> knowledge_store/removed/ (dry run unless --apply; undo: vault-migrate --undo MAP)
 kb.py image-audit [--vault V] [--out FILE]    # read-only: one row per vault image (class, paper, part, clone twin or trace); never writes, moves or deletes; --out = full JSON, default none (summary printed)
 kb.py source import FILE --vault V | list --vault V | show SOURCE_ID      # Word/notes/images/transcripts
 kb.py obsidian-plugins status|download|install [vault…]

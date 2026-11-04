@@ -107,7 +107,7 @@ class KbWiringTests(unittest.TestCase):
         for command, extra, handler, expect_lock in (
                 ("notes", [], "cmd_notes", True), ("link-concepts", [], "cmd_link_concepts", True),
                 ("analyze", ["--vault", "v"], "cmd_analyze", False), ("steps", ["notes"], "cmd_demo3", False),
-                ("structured-run", ["P"], "cmd_demo3", False)):
+                ("structured-run", ["P"], "cmd_demo3", False), ("run-all", [], "cmd_demo3", False)):
             with self.subTest(command=command):
                 lock = MagicMock(return_value=contextlib.nullcontext())
                 with patch.object(kb.config, "load", return_value={}), patch.object(kb.db, "connect", return_value=con),                         patch.object(kb.workflow, "writer_lock", lock), patch.object(kb, handler) as handled,                         patch.object(sys, "argv", ["kb.py", command, *extra]):

@@ -169,7 +169,7 @@ class LookalikeSearchTests(unittest.TestCase):
             self.assertTrue(sources_misc.search_sources(self.con, query, vault="one"), query)
         self.assertFalse([r for r in sources_misc.search_sources(self.con, "ΔG", vault="one") if "5 g" in r["text"]])
 
-    def test_an_old_source_index_is_gated_on_its_own_table_and_a_full_index_sources_upgrades_it(self):
+    def test_an_old_source_index_is_gated_on_its_own_table_and_rebuild_db_upgrades_it(self):
         import tempfile
         from pathlib import Path
         self.con.execute("DROP TABLE IF EXISTS source_sentences_fts")
@@ -182,7 +182,7 @@ class LookalikeSearchTests(unittest.TestCase):
         self.assertTrue(db.fts_glyph_tokens(self.con))  # the paper tables are current; the source table is not
         self.assertFalse(db.fts_glyph_tokens(self.con, ("source_sentences_fts",)))
         self.assertFalse(sources_misc.search_sources(self.con, "ΔG", vault="one"))  # a generated "∆G" would be "g" here
-        sources_misc.index_sources(self.con)
+        db.rebuild(self.con)  # `kb.py rebuild-db` (G5) re-indexes imported sources with the current tokenizer
         self.assertTrue(db.fts_glyph_tokens(self.con, ("source_sentences_fts",)))
         self.assertEqual([r["text"] for r in sources_misc.search_sources(self.con, "ΔG", vault="one")], ["The ∆G was small."])
 

@@ -886,7 +886,8 @@ def ensure_term_stub(vault, term_type, term, registry):
     _existing_note_names(vault).add(name.lower())
 
 
-WIKI_LINK = re.compile(r"\[\[([^\]|#^]+)(?:[#^][^\]|]*)?(?:\|[^\]]*)?\]\]")
+# The lazy target stops before the table-escaped alias bar `\|` (Obsidian's form in a table cell); a backslash inside a path (`P\T`) stays.
+WIKI_LINK = re.compile(r"\[\[([^\]|#^]+?)(?:[#^][^\]|]*)?(?:\\?\|[^\]]*)?\]\]")
 
 
 def _stub_kind(key):
